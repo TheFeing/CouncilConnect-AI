@@ -1,0 +1,7 @@
+fastapi             # The web server framework for our API
+uvicorn             # The ASGI server to run FastAPI
+pytest              # The testing engine
+pytest-cov          # Measures which lines of code are tested
+flake8              # The code style checker
+google-generativeai # Gemma 3 API connection
+qdrant-client       # Vector database connection
