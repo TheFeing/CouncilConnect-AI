@@ -1,7 +1,9 @@
+# GitHub Actions auto-reads YAML config files in .github/workflows/ directory of a repo.
+
 name: Continuous Integration
 on:
   push:
-    branches: [ main ]
+    branches: [ main ]  # Consider removing this if solely relying on pull_request triggers to avoid redundant runs.
   pull_request:
     branches: [ main ]
 

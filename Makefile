@@ -1,4 +1,7 @@
-# Define targets that do not represent actual files on the disk
+# Makefile gets instructions from cicd.yml.
+
+# Ignore any files with this name on the disk and always run the commands associated with this target.
+# By default, Make compares the timestamps (products vs dependencies) to determine if it needs to run the commands.
 .PHONY: build test lint clean
 
 # build: Packages the Python application into a Docker container.
