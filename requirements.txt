@@ -1,7 +1,9 @@
-fastapi             # The web server framework for our API
-uvicorn             # The ASGI server to run FastAPI
+fastapi             # The web server framework
+uvicorn             # Runs the web server
 pytest              # The testing engine
-pytest-cov          # Measures which lines of code are tested
+pytest-cov          # Measures test coverage
+pytest-mock         # Mocks external dependencies in tests
 flake8              # The code style checker
 google-generativeai # Gemma 3 API connection
+google-genai        # Modern Gemma 3 API connection
 qdrant-client       # Vector database connection
