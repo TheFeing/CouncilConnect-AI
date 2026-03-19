@@ -1,0 +1,30 @@
+{
+    "emails": [
+        "salford.direct@salford.gov.uk",
+        "counciltax@salford.gov.uk",
+        "benefits@salford.gov.uk",
+        "planning.contact@salford.gov.uk",
+        "local.landcharges@salford.gov.uk"
+    ],
+    "phone_numbers": [
+        "01617932500",
+        "01617944711",
+        "01619096504",
+        "01619096502"
+    ],
+    "domains": [
+        "www.salford.gov.uk",
+        "scc-online.salford.gov.uk",
+        "portal.salford.gov.uk"
+    ],
+    "social_media": [
+        "@SalfordCouncil",
+        "[facebook.com/salfordcouncil](https://facebook.com/salfordcouncil)",
+        "[instagram.com/salford_council](https://instagram.com/salford_council)"
+    ],
+    "physical_addresses": [
+        "Salford Civic Centre, Chorley Road, Swinton, M27 5AW",
+        "Unity House, Chorley Road, Swinton, M27 5AW",
+        "Sutherland House, 303 Chorley Road, Swinton, M27 6AY"
+    ]
+}
