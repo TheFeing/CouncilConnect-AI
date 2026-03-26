@@ -1,49 +1,33 @@
 import pytest
-from scraper.redactor import redact_pii1
+import scraper.redactor
 
+def test_pii_redaction_and_preservation(): # Ensures public council details are kept but private PII is removed.
 
-def test_pii_redaction_and_preservation1():
-
-    raw_text1 = (
+    raw_text = (
         "Contact me at private@gmail.com or 07712345678. "
         "Official: salford.direct@salford.gov.uk and 0161 793 2500."
     )
-    result1 = redact_pii1(raw_text1)
+    result = scraper.redactor.redact_pii(raw_text)
+    
+    assert "[EMAIL_REDACTED]" in result, "Private email was not redacted."
+    assert "[PHONE_REDACTED]" in result, "Private phone number was not redacted."
+    
+    assert "salford.direct@salford.gov.uk" in result, "Official council email incorrectly redacted."
+    assert "0161 793 2500" in result, "Official council phone line incorrectly redacted."
 
-    assert "[EMAIL_REDACTED]" in result1, "Private email was not redacted."
-    assert "[PHONE_REDACTED]" in result1, "Private phone number was not redacted."
+def test_varied_formats_and_false_positives(): # Tests regex robustness against different spacing and numeric formats.
 
-    # Assertions for Preservation
-    assert (
-        "salford.direct@salford.gov.uk" in result1
-    ), "Official council email was incorrectly redacted."
-    assert (
-        "0161 793 2500" in result1
-    ), "Official council phone line was incorrectly redacted."
+    text = "Intl: +44 7712 345 678. Short code: 01234. Non-email: user@domain"
+    result = scraper.redactor.redact_pii(text)
+    
+    assert "[PHONE_REDACTED]" in result, "International mobile format failed redaction."
+    assert "01234" in result, "Short numeric code was incorrectly flagged as PII."
+    assert "user@domain" in result, "Incomplete email string was incorrectly flagged as PII."
 
+def test_edge_cases(): # Verifies PII detection at string boundaries.
 
-def test_varied_formats_and_false_positives1():
-
-    text1 = "Intl: +44 7712 345 678. Short code: 01234. Non-email: user@domain"
-    result1 = redact_pii1(text1)
-
-    assert (
-        "[PHONE_REDACTED]" in result1
-    ), "International mobile format failed redaction."
-    assert "01234" in result1, "Short numeric code was incorrectly flagged as PII."
-    assert (
-        "user@domain" in result1
-    ), "Incomplete email string was incorrectly flagged as PII."
-
-
-def test_edge_cases1():
-
-    text1 = "jane.doe@private.com is first string. Last string is 07123456789"
-    result1 = redact_pii1(text1)
-
-    assert result1.startswith(
-        "[EMAIL_REDACTED]"
-    ), "PII at start of string failed redaction."
-    assert result1.endswith(
-        "[PHONE_REDACTED]"
-    ), "PII at end of string failed redaction."
+    text = "jane.doe@private.com is first string. Last string is 07123456789"
+    result = scraper.redactor.redact_pii(text)
+    
+    assert result.startswith("[EMAIL_REDACTED]"), "PII at start of string failed redaction."
+    assert result.endswith("[PHONE_REDACTED]"), "PII at end of string failed redaction."
