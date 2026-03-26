@@ -1,23 +1,27 @@
 import os
-import google.genai as genai
+import google.genai
+import typing
 
-def get_ai_response1(user_input1):
+def get_ai_response(query: str) -> str:
     """
-    Connects to the Gemma 3 27B model using the Google GenAI SDK.
-    Uses the modern Client pattern for efficiency.
+    Interacts with the Gemma 3 API using the modern google-genai SDK.
     """
-    api_key1 = os.getenv("GEMMA_API_KEY")
-    if not api_key1:
+    # Access API key via environment variables
+    api_key = os.getenv("GEMMA_API_KEY", "")
+    if not api_key:
         return "Configuration Error: API Key missing."
 
+    # Initialize the modern GenAI Client
+    client = google.genai.Client(api_key=api_key)
+
     try:
-        client1 = genai.Client(api_key=api_key1)
-        # Model selection based on Sprint 2 Project Plan
-        response1 = client1.models.generate_content(
-            model='gemma-3-27b',
-             contents=user_input1
+        # Using the unified generate_content method for Gemma 3 27B
+        response = client.models.generate_content(
+            model='gemma-3-27b', 
+            contents=query
         )
-        return response1.text
-    except Exception as e1:
-        # Prevents server crash by catching SDK-level exceptions
-        return f"The AI service is currently unavailable. Error: {str(e1)}"
+        return response.text
+    except Exception as error:
+        # Log error for observability
+        print(f"Inference Error: {str(error)}")
+        return "The service is currently unavailable. Please try again later."

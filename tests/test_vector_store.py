@@ -1,18 +1,17 @@
 import pytest
-from app.vector_store import VectorStoreManager1
+import app.vector_store
 
-def test_vector_storage_and_retrieval1():
+def test_vector_storage_and_retrieval():
     """
     Rationale: Integration test to ensure DB connectivity, schema validity and 80% coverage of vector_store.py.
     """
-
-    manager1 = VectorStoreManager1(collection_name1="test_collection")
-    sample_text1 = "Salford residents can pay council tax online."
-   
-    # Insert then lookup the same text
-    manager1.upsert_document1(sample_text1, {"type": "test"})
-    search_results1 = manager1.search_similar1("How to pay tax?")
-   
+    manager = app.vector_store.VectorStoreManager(collection_name="test_collection")
+    sample_text = "Salford residents can pay council tax online."
+    
+    # Inserts then looks up the same text
+    manager.upsert_document(sample_text, {"type": "test"})
+    search_results = manager.search_similar("How to pay tax?")
+    
     # Assert
-    assert len(search_results1) > 0 # At least one result should be returned.
-    assert search_results1[0].payload["text"] == sample_text1   # The stored text should match the original input.
+    assert len(search_results) > 0, "Vector DB failed to return any results." # At least one result should be returned.
+    assert search_results[0].payload["text"] == sample_text, "Vector DB payload corruption." # The stored text should match the original input.
