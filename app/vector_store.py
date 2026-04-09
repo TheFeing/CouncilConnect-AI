@@ -1,42 +1,60 @@
 import uuid             # Generates unique IDs for vector points.
 import qdrant_client    # Assists in connecting to / interacting with the Qdrant vector database.
 import qdrant_client.models # Contains helper classes (models) that define the 'rules' for our data structure.
+import app.security_utils # Secure secret retrieval.
 
 class VectorStoreManager: # A class is more efficient for managing state (e.g., DB connections) and encapsulating related functionality.
     """
     Manages the lifecycle of vector data: Connection, Collection creation, and Storage.
-    Uses 'Distance.COSINE' for semantic similarity measurement (S11).
+    Integrates SecretManager for Zero-Trust connectivity
     """
 
     # self: Current object memory pointer. Must be defined as the first parameter.
-    def __init__(self, collection_name="council_knowledge"): # Auto-called (__init__) and linked to instance memory (via 'self') with default value.
-        self.client = qdrant_client.QdrantClient(":memory:") # In-memory DB for development/testing, defined by QdrantClient's reserved keyword.
+    def __init__(self, collection_name="council_knowledge"): # Auto-called (__init__) and linked to instance memory (via 'self') with default value (council_knowledge).
+        # 1. Securely fetch connection details from Key Vault
+        # Use the full module path to instantiate SecretManager
+        secrets = app.security_utils.SecretManager()
+        qdrant_url = secrets.get_secret("QDRANT-URL")
+        qdrant_key = secrets.get_secret("QDRANT-API-KEY")
+
+        # 2. Establish connection to Cloud Cluster
+        if qdrant_url and qdrant_key:
+            self.client = qdrant_client.QdrantClient(url=qdrant_url, api_key=qdrant_key)
+        else:
+            print("Warning: Qdrant credentials missing. Falling back to :memory: for safety.")
+            self.client = qdrant_client.QdrantClient(":memory:")    # In-memory DB for development/testing, defined by QdrantClient's reserved keyword (":memory:").
+
         self.collection_name = collection_name
-        self._ensure_collection()  
+        self._ensure_collection()
 
     def _ensure_collection(self): # Single underscore prefix discourages external calls (outside of the class).
         """
         Rationale: Automated schema enforcement. Ensures the DB is ready
         without manual intervention (DevOps best practice).
         """
-        collections = self.client.get_collections().collections
-        exists = any(c.name == self.collection_name for c in collections) # Checks if current item exists in the list of collections. 'any' returns True on first match, optimising performance.
+
+        try:
+            collections = self.client.get_collections().collections
+            exists = any(c.name == self.collection_name for c in collections) # Checks if current item exists in the list of collections. 'any' returns True on first match, optimising performance.
         
-        if not exists:
-            self.client.create_collection( 
-                collection_name=self.collection_name,
-                # Sets vectors with 768 dimensions and will use Cosine Similarity to calculate how related two pieces of text are.
-                # 768 dimensions is Goldilocks size: Large enough to capture semantic nuances but small enough for efficient storage and retrieval.
-                # Cosine similarity is ideal for text embeddings: Angle between vectors, effective for measuring semantic similarity regardless of vector magnitude.
-                vectors_config=qdrant_client.models.VectorParams(
-                    size=768, 
-                    distance=qdrant_client.models.Distance.COSINE
-                ), 
-            )
+            if not exists:
+                self.client.create_collection( 
+                    collection_name=self.collection_name,
+                    # Sets vectors with 768 dimensions and will use Cosine Similarity to calculate how related two pieces of text are.
+                    # 768 dimensions is Goldilocks size: Large enough to capture semantic nuances but small enough for efficient storage and retrieval.
+                    # Cosine similarity is ideal for text embeddings: Angle between vectors, effective for measuring semantic similarity regardless of vector magnitude.
+                    vectors_config=qdrant_client.models.VectorParams(
+                        size=768, 
+                        distance=qdrant_client.models.Distance.COSINE
+                    ), 
+                )
+                
+        except Exception as e:
+                print(f"Vector DB Error: Could not verify collection. {e}")
 
     def upsert_document(self, text, metadata=None): # Not storing metadata provides various advantages (e.g., storage efficiency, query performance, simplified indexing, privacy and security, etc.)
         """
-        Rationale: Converts text to vector representation and stores it (S12).
+        Converts text to vector representation and stores it.
         The metadata allows for source-filtering during retrieval.
         """
         mock_vector = [0.1] * 768 # Mocking a 768-dimension vector for development. In production, this would be generated by an embedding model.
@@ -56,9 +74,10 @@ class VectorStoreManager: # A class is more efficient for managing state (e.g., 
 
     def search_similar(self, query_text, limit=3): # Retrieves top 3 most semantically similar documents based on query text.
         """
-        Rationale: Enables the system to 'find' relevant council documents
+        Enables the system to 'find' relevant council documents
         based on user intent rather than keywords.
         """
+
         mock_query_vector = [0.1] * 768
         return self.client.query_points(
             collection_name=self.collection_name,
