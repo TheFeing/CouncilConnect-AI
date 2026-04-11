@@ -10,8 +10,8 @@ def check_safety(user_query: str) -> bool:  # Input string, return boolean
 
     # 2. Safety check: If no key is found, handle based on environment
     if not api_key:
-        print("Safety Warning: No API Key found. Defaulting to True for local testing.")
-        return True # Dev: Fail-open (True) for testing; Prod: Fail-closed (False) for safety
+        print("Safety Warning: No API Key found. Defaulting to False for production safety.")
+        return False # Dev: Fail-open (True) for testing; Prod: Fail-closed (False) for safety
         
     # 3. Initialise the AI Client with the secured key
     client = google.genai.Client(api_key=api_key)   # Communication bridge between script and GenAI SDK

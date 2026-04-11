@@ -29,10 +29,10 @@ def test_check_safety_unsafe_response(mock_client_class): # Tests if "Unsafe" in
         result = app.guardrails.check_safety("Some malicious query")
         assert result is False
 
-def test_check_safety_missing_api_key(): # Tests fail-open logic when API key missing
+def test_check_safety_missing_api_key(): # Tests fail-closed logic when API key missing
     with unittest.mock.patch.dict('os.environ', {}, clear=True): # patch.dict clears all variables
         result = app.guardrails.check_safety("Any query")
-        assert result is True
+        assert result is False
 
 @unittest.mock.patch('app.guardrails.google.genai.Client')
 def test_check_safety_exception_handling(mock_client_class): # Tests fail-closed logic when API call raises an exception (e.g., network error)
