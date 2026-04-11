@@ -13,7 +13,7 @@ def test_check_safety_safe_response(mock_client_class): # Tests if "Safe" in res
     mock_response.text = "The query is Safe."
     mock_client.models.generate_content.return_value = mock_response
 
-    with unittest.mock.patch.dict('os.environ', {'GEMMA_API_KEY': 'fake_key'}): # patch.dict replaces os.environ with fake_key. Library os can be auto-imported by unittest.mock
+    with unittest.mock.patch.dict('os.environ', {'GEMMA-API-KEY': 'fake_key'}): # patch.dict replaces os.environ with fake_key. Library os can be auto-imported by unittest.mock
         result = app.guardrails.check_safety("How do I pay council tax?")
         assert result is True
 
@@ -25,7 +25,7 @@ def test_check_safety_unsafe_response(mock_client_class): # Tests if "Unsafe" in
     mock_response.text = "This query is Unsafe and violates policy."
     mock_client.models.generate_content.return_value = mock_response
 
-    with unittest.mock.patch.dict('os.environ', {'GEMMA_API_KEY': 'fake_key'}):
+    with unittest.mock.patch.dict('os.environ', {'GEMMA-API-KEY': 'fake_key'}):
         result = app.guardrails.check_safety("Some malicious query")
         assert result is False
 
@@ -40,6 +40,6 @@ def test_check_safety_exception_handling(mock_client_class): # Tests fail-closed
     mock_client_class.return_value = mock_client
     mock_client.models.generate_content.side_effect = Exception("API Down") # Exception is a master category that catches all exceptions, simulating an API failure
 
-    with unittest.mock.patch.dict('os.environ', {'GEMMA_API_KEY': 'fake_key'}):
+    with unittest.mock.patch.dict('os.environ', {'GEMMA-API-KEY': 'fake_key'}):
         result = app.guardrails.check_safety("Trigger error")
         assert result is False
