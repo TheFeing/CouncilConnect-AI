@@ -4,6 +4,10 @@ resource "azurerm_container_app" "app" {
   resource_group_name          = azurerm_resource_group.rg.name
   revision_mode                = "Single" # No Blue/Green deployments
 
+  identity {
+    type = "SystemAssigned"
+  }
+
   # Desired state: Container blueprint
   template {
     container {
@@ -12,9 +16,15 @@ resource "azurerm_container_app" "app" {
       cpu    = 0.25
       memory = "0.5Gi"
 
+      # Commented out in Sprint 6
+      # env {
+      #   name  = "GEMMA_API_KEY"
+      #   value = var.gemma_api_key
+      # }
+
       env {
-        name  = "GEMMA_API_KEY"
-        value = var.gemma_api_key
+        name  = "VAULT_URL"
+        value = azurerm_key_vault.main.vault_uri
       }
     }
 
@@ -39,4 +49,11 @@ resource "azurerm_container_app" "app" {
       latest_revision = true
     }
   }
+}
+
+# The Managed Identity only receives 'Read' permissions (Least-Privilege)
+resource "azurerm_role_assignment" "vault_access" {
+  scope                = azurerm_key_vault.main.id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = azurerm_container_app.app.identity[0].principal_id
 }
