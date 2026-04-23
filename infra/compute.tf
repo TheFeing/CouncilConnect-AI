@@ -10,8 +10,8 @@ resource "azurerm_container_app" "app" {
   }
 
   registry {
-    server    = azurerm_container_registry.acr.login_server
-    identity  = azurerm_user_assigned_identity.acr_puller.id
+    server   = azurerm_container_registry.acr.login_server
+    identity = azurerm_user_assigned_identity.acr_puller.id
   }
 
   # Desired state: Container blueprint
@@ -28,7 +28,7 @@ resource "azurerm_container_app" "app" {
       }
 
       env {
-        name = "APPLICATIONINSIGHTS_CONNECTION_STRING"
+        name  = "APPLICATIONINSIGHTS_CONNECTION_STRING"
         value = azurerm_application_insights.app_insights.connection_string
       }
     }
@@ -50,7 +50,7 @@ resource "azurerm_container_app" "app" {
 
     # Routing instruction (e.g., Blue/Green deployment traffic)
     traffic_weight {
-      percentage      = 100
+      percentage = 100
       # revision_name = "app-v1-blue"
       latest_revision = true
     }
