@@ -39,13 +39,10 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # Disables logging buffer; errors are printed to the console instantly
 ENV PYTHONUNBUFFERED=1
 
-# ------------------------------------------------------------------------------
-# THE LAUNCH: Networking and Execution
-# ------------------------------------------------------------------------------
 # Uses port 8000 for the app (Standard for FastAPI/Azure Container Apps)
 EXPOSE 8000
 
 # Entry point:
-# Look in the 'app' folder -> main.py -> find the FastAPI object 'app1'
+# Look in the 'app' folder -> main.py -> find the FastAPI object 'app_instance'
 # 0.0.0.0: Listens to all network interfaces (required for container access)
-CMD ["uvicorn", "app.main:app1", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app_instance", "--host", "0.0.0.0", "--port", "8000"]

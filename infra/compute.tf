@@ -2,29 +2,34 @@ resource "azurerm_container_app" "app" {
   name                         = "app-${var.project_name}"
   container_app_environment_id = azurerm_container_app_environment.env.id
   resource_group_name          = azurerm_resource_group.rg.name
-  revision_mode                = "Single" # No Blue/Green deployments
+  revision_mode                = "Multiple" # Use "Single" for no Blue/Green deployments
 
   identity {
-    type = "SystemAssigned"
+    type         = "SystemAssigned, UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.acr_puller.id]
+  }
+
+  registry {
+    server   = azurerm_container_registry.acr.login_server
+    identity = azurerm_user_assigned_identity.acr_puller.id
   }
 
   # Desired state: Container blueprint
   template {
     container {
       name   = "api-gateway"
-      image  = "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
+      image  = "${azurerm_container_registry.acr.login_server}/councilconnect-ai:latest"
       cpu    = 0.25
       memory = "0.5Gi"
-
-      # Commented out in Sprint 6
-      # env {
-      #   name  = "GEMMA_API_KEY"
-      #   value = var.gemma_api_key
-      # }
 
       env {
         name  = "VAULT_URL"
         value = azurerm_key_vault.main.vault_uri
+      }
+
+      env {
+        name  = "APPLICATIONINSIGHTS_CONNECTION_STRING"
+        value = azurerm_application_insights.app_insights.connection_string
       }
     }
 
@@ -45,10 +50,20 @@ resource "azurerm_container_app" "app" {
 
     # Routing instruction (e.g., Blue/Green deployment traffic)
     traffic_weight {
-      percentage      = 100
+      percentage = 100
+      # revision_name = "app-v1-blue"
       latest_revision = true
     }
+    # traffic_weight {
+    #   revision_name = "app-v2-green"
+    #   percentage    = 10
+    # }
   }
+
+  # Makes sure Role Assignment is ready first
+  depends_on = [
+    azurerm_role_assignment.acr_pull
+  ]
 }
 
 # The Managed Identity only receives 'Read' permissions (Least-Privilege)
