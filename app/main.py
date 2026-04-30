@@ -29,6 +29,18 @@ async def chat(request: QueryRequest):
     response_text = app.inference.get_ai_response(request.prompt)
     return {"response": response_text}
 
+# Configure CORS to allow frontend communication.
+app_instance.add_middleware(
+    fastapi.middleware.cors.CORSMiddleware,
+    allow_origins=[     # In production, this should be restricted to the actual frontend URL(s)
+        "http://localhost:8501",  # Streamlit default
+        "http://127.0.0.1:8501",  # Alternative local address
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Bind to port 8000 to match compute.tf
 if __name__ == "__main__":
     uvicorn.run(app_instance, host="0.0.0.0", port=8000)
