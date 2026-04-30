@@ -1,6 +1,11 @@
 import os   # Used for accessing environment variables, allowing for secure configuration without hardcoding sensitive information.
 import azure.identity   # Provides various credential classes for authenticating with Azure services (e.g., Managed Identity).
 import azure.keyvault.secrets   # For interacting with Azure Key Vault to retrieve secrets securely at runtime.
+import logging  # Enables logging for better visibility and debugging.
+
+# Initialise logging for better visibility in Azure Monitor
+logging.basicConfig(level=logging.INFO) # Set logging level to INFO (value >= 20) to capture informational messages and above (warnings, errors, critical).
+logger = logging.getLogger(__name__)
 
 class SecretManager:
     """
@@ -20,7 +25,7 @@ class SecretManager:
         """
 		
         if not self.vault_url:
-            print(f"Warning: VAULT_URL not found. Falling back to local env for {secret_name}")
+            logger.warning(f"Warning: VAULT_URL not found. Falling back to local env for {secret_name}")
             return os.getenv(secret_name, "")
             
         try:
@@ -28,5 +33,5 @@ class SecretManager:
             retrieved_secret = client.get_secret(secret_name)
             return retrieved_secret.value	# Runtime fetching in RAM only, never stored elsewhere.
         except Exception as e:
-            print(f"Security Error: Could not retrieve {secret_name} from Vault. {e}")
+            logger.error(f"Security Error: Could not retrieve {secret_name} from Vault. {e}")
             return os.getenv(secret_name, "")

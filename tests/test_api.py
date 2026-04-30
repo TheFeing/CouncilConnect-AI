@@ -5,6 +5,7 @@ import os
 import unittest.mock
 import starlette.testclient
 import app.main
+import app.security_utils
 
 @pytest.fixture
 def api_client():
@@ -72,3 +73,25 @@ def test_get_ai_response_missing_api_key(api_client, mocked_genai):
         
         assert response.status_code == 200
         assert "API Key missing" in response.json()["response"]
+
+@unittest.mock.patch("azure.keyvault.secrets.SecretClient")
+def test_get_secret_vault_path(mock_client_class):
+    # 1. Setup: Pretend a Vault URL exists in THE environment
+    with unittest.mock.patch.dict(os.environ, {"VAULT_URL": "https://fake-vault.vault.azure.net/"}):
+        # Initialise THE manager via the module prefix
+        manager = app.security_utils.SecretManager()
+        
+        # 2. Mock the successful path
+        mock_client = unittest.mock.MagicMock()
+        mock_client_class.return_value = mock_client
+        mock_client.get_secret.return_value.value = "cloud-secret"
+        
+        # This executes THE try block (lines 31-34)
+        assert manager.get_secret("DB_PASSWORD") == "cloud-secret"
+        
+        # 3. Mock the failure path
+        mock_client.get_secret.side_effect = Exception("Connection Failed")
+        
+        # This executes THE except block (lines 35-37)
+        with unittest.mock.patch.dict(os.environ, {"DB_PASSWORD": "local-fallback"}):
+            assert manager.get_secret("DB_PASSWORD") == "local-fallback"

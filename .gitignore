@@ -41,6 +41,7 @@ coverage.xml
 *.model
 *.weights
 .ipynb_checkpoints/
+knowledge_base/processed/*.json
 
 # --- Docker ---
 .docker/
