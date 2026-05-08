@@ -13,7 +13,7 @@ with unittest.mock.patch.dict('sys.modules', {'google.genai': unittest.mock.Magi
 @unittest.mock.patch('os.getenv')
 def test_get_ai_response_success(mock_getenv, mock_client_class):
     """
-    Rationale: Standard success path test for Gemma 3 integration using modern Client.
+    Rationale: Standard success path test for Google AI integration using modern Client.
     """
 
     # Setup mocks
@@ -22,16 +22,16 @@ def test_get_ai_response_success(mock_getenv, mock_client_class):
     mock_client_class.return_value = mock_client_instance
     
     mock_response = unittest.mock.MagicMock()
-    mock_response.text = "Hello from Gemma 3!"
+    mock_response.text = "Hello from Gemma 4!"
     mock_client_instance.models.generate_content.return_value = mock_response
 
     # Execute
     result = app.inference.get_ai_response("Hi")
 
     # Verify
-    assert result == "Hello from Gemma 3!"
+    assert result == "Hello from Gemma 4!"
     mock_client_instance.models.generate_content.assert_called_once_with(
-        model='gemma-3-27b', 
+        model='gemma-4-31b-it', 
         contents="Hi"
     )
 
