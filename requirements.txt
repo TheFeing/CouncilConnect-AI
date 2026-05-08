@@ -11,3 +11,4 @@ requests                # HTTP requests for scraping
 azure-identity          # Authenticates via Managed Identity or CLI
 azure-keyvault-secrets  # Fetches Gemma and Qdrant keys from the Vault
 locust                  # User traffic simulation
+streamlit               # Frontend UI framework

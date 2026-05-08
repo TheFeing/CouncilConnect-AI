@@ -15,6 +15,7 @@ build:
 # "--cov-fail-under=80" enforces mandatory EPA quality gate.
 test:
 	PYTHONPATH=. pytest tests/ --cov=app --cov-report=term-missing --cov-fail-under=80
+	rm -f knowledge_base/processed/*.json	# Clean up processed knowledge base files after tests to avoid clutter.
 
 # lint: Scans the code for formatting errors or "bad smells" using Flake8.
 lint:

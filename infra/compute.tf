@@ -1,3 +1,9 @@
+# Fetch the secret value from Key Vault at plan/apply time
+data "azurerm_key_vault_secret" "gemma_key" {
+  name         = "GEMMA-API-KEY"
+  key_vault_id = azurerm_key_vault.main.id
+}
+
 resource "azurerm_container_app" "app" {
   name                         = "app-${var.project_name}"
   container_app_environment_id = azurerm_container_app_environment.env.id
@@ -14,6 +20,12 @@ resource "azurerm_container_app" "app" {
     identity = azurerm_user_assigned_identity.acr_puller.id
   }
 
+  # Maps the secret fetched via the data source into the app configuration
+  secret {
+    name  = "gemma-api-key"
+    value = data.azurerm_key_vault_secret.gemma_key.value
+  }
+
   # Desired state: Container blueprint
   template {
     container {
@@ -25,6 +37,12 @@ resource "azurerm_container_app" "app" {
       env {
         name  = "VAULT_URL"
         value = azurerm_key_vault.main.vault_uri
+      }
+
+      # Inject the secret alias into the actual environment variable
+      env {
+        name        = "GEMMA_API_KEY"
+        secret_name = "gemma-api-key"
       }
 
       env {

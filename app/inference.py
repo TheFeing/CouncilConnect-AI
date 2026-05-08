@@ -4,7 +4,7 @@ import typing
 
 def get_ai_response(query: str) -> str:
     """
-    Interacts with the Gemma 3 API using the modern google-genai SDK.
+    Interacts with the Google AI API using the modern google-genai SDK.
     """
     # Access API key via environment variables
     api_key = os.getenv("GEMMA_API_KEY", "")
@@ -15,9 +15,9 @@ def get_ai_response(query: str) -> str:
     client = google.genai.Client(api_key=api_key)
 
     try:
-        # Using the unified generate_content method for Gemma 3 27B
+        # Using the unified generate_content method for Gemma 4 31B
         response = client.models.generate_content(
-            model='gemma-3-27b', 
+            model='gemma-4-31b-it', # See Google for the latest model names and versions
             contents=query
         )
         return response.text
