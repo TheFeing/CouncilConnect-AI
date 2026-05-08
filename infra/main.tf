@@ -45,6 +45,11 @@ resource "azurerm_application_insights" "app_insights" {
   application_type    = "web"
 }
 
+# Automate the registration of the Alerts Management provider
+resource "azurerm_resource_provider_registration" "alerts_management" {
+  name = "Microsoft.AlertsManagement"
+}
+
 # Financial budget to prevent runaway costs from scaling (K4)
 resource "azurerm_consumption_budget_resource_group" "safety_budget" {
   name              = "budget-${var.project_name}"
@@ -52,7 +57,7 @@ resource "azurerm_consumption_budget_resource_group" "safety_budget" {
   amount            = 10 # Monthly limit in GBP
   time_grain        = "Monthly"
   time_period {
-    start_date = "2026-04-01T00:00:00Z" # Must be the first of a month
+    start_date = "${formatdate("YYYY-MM-01", timestamp())}T00:00:00Z" # Must be the first of a month
     # end_date   = "2028-04-01T00:00:00Z" # Optional: When the budget expires
   }
 

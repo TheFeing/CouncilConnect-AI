@@ -1,3 +1,9 @@
+# Fetch the secret value from Key Vault at plan/apply time
+data "azurerm_key_vault_secret" "gemma_key" {
+  name         = "GEMMA-API-KEY"
+  key_vault_id = azurerm_key_vault.main.id
+}
+
 resource "azurerm_container_app" "app" {
   name                         = "app-${var.project_name}"
   container_app_environment_id = azurerm_container_app_environment.env.id
@@ -14,6 +20,12 @@ resource "azurerm_container_app" "app" {
     identity = azurerm_user_assigned_identity.acr_puller.id
   }
 
+  # Maps the secret fetched via the data source into the app configuration
+  secret {
+    name  = "gemma-api-key"
+    value = data.azurerm_key_vault_secret.gemma_key.value
+  }
+
   # Desired state: Container blueprint
   template {
     container {
@@ -27,6 +39,12 @@ resource "azurerm_container_app" "app" {
         value = azurerm_key_vault.main.vault_uri
       }
 
+      # Inject the secret alias into the actual environment variable
+      env {
+        name        = "GEMMA_API_KEY"
+        secret_name = "gemma-api-key" 
+      }
+
       env {
         name  = "APPLICATIONINSIGHTS_CONNECTION_STRING"
         value = azurerm_application_insights.app_insights.connection_string
@@ -34,12 +52,12 @@ resource "azurerm_container_app" "app" {
     }
 
     # KEDA Scaling: Logic to manage replicas based on traffic
-    min_replicas = 0 # Scale-to-Zero: Cost is £0 when not in use
+    min_replicas = 0  # Scale-to-Zero: Cost is £0 when not in use
     max_replicas = 10
 
     http_scale_rule {
       name                = "scale-on-requests"
-      concurrent_requests = "10" # New instance spins up for every 10 concurrent users
+      concurrent_requests = "10"  # New instance spins up for every 10 concurrent users
     }
   }
 

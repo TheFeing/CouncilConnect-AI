@@ -6,8 +6,15 @@ resource "azurerm_container_app" "frontend" {
   resource_group_name          = azurerm_resource_group.rg.name             # Defined in main.tf
   revision_mode                = "Single"
 
+# ACR Puller identity
   identity {
-    type = "SystemAssigned"
+    type = "SystemAssigned, UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.acr_puller.id]
+  }
+
+  registry {
+    server   = azurerm_container_registry.acr.login_server
+    identity = azurerm_user_assigned_identity.acr_puller.id
   }
 
   template {
@@ -32,7 +39,13 @@ resource "azurerm_container_app" "frontend" {
     }
     
     min_replicas = 0    # Scale to zero when inactive (K4)
-    max_replicas = 3
+    max_replicas = 10   # Should match backend's ceiling
+
+    # Scaling logic to prevent bottlenecks
+    http_scale_rule {
+      name                = "scale-on-requests"
+      concurrent_requests = "20" 
+    }
   }
 
   ingress {
@@ -43,6 +56,11 @@ resource "azurerm_container_app" "frontend" {
       latest_revision = true
     }
   }
+
+  # Ensure role assignment exists before deployment
+  depends_on = [
+    azurerm_role_assignment.acr_pull
+  ]
 }
 
 # Output the public URL for verification
