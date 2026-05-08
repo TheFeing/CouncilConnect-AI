@@ -42,7 +42,7 @@ resource "azurerm_container_app" "app" {
       # Inject the secret alias into the actual environment variable
       env {
         name        = "GEMMA_API_KEY"
-        secret_name = "gemma-api-key" 
+        secret_name = "gemma-api-key"
       }
 
       env {
@@ -52,12 +52,12 @@ resource "azurerm_container_app" "app" {
     }
 
     # KEDA Scaling: Logic to manage replicas based on traffic
-    min_replicas = 0  # Scale-to-Zero: Cost is £0 when not in use
+    min_replicas = 0 # Scale-to-Zero: Cost is £0 when not in use
     max_replicas = 10
 
     http_scale_rule {
       name                = "scale-on-requests"
-      concurrent_requests = "10"  # New instance spins up for every 10 concurrent users
+      concurrent_requests = "10" # New instance spins up for every 10 concurrent users
     }
   }
 
