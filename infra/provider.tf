@@ -1,3 +1,6 @@
+# --- TERRAFORM & AZURE PROVIDER CONFIGURATION ---
+# Establishes the connection and versioning for the Azure Cloud API.
+
 # Terraform Block: Configures the requirements for the Terraform binary
 terraform {
   required_providers {

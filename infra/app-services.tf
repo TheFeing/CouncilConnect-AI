@@ -1,9 +1,13 @@
-# Fetch the secret value from Key Vault at plan/apply time
+# --- APPLICATION SERVICES (BACKEND AI ENGINE & RESIDENT UI) ---
+# Manages the Frontend and Backend connection logic.
+
+# Fetches the Gemma API key from Key Vault
 data "azurerm_key_vault_secret" "gemma_key" {
   name         = "GEMMA-API-KEY"
   key_vault_id = azurerm_key_vault.main.id
 }
 
+# Backend Container App: Scraping and Vector engine
 resource "azurerm_container_app" "app" {
   name                         = "app-${var.project_name}"
   container_app_environment_id = azurerm_container_app_environment.env.id
@@ -35,7 +39,7 @@ resource "azurerm_container_app" "app" {
       memory = "0.5Gi"
 
       env {
-        name  = "VAULT_URL"
+        name  = "VAULT_URL" # Must match the name Python code looks for
         value = azurerm_key_vault.main.vault_uri
       }
 
@@ -79,14 +83,67 @@ resource "azurerm_container_app" "app" {
   }
 
   # Makes sure Role Assignment is ready first
-  depends_on = [
-    azurerm_role_assignment.acr_pull
-  ]
+  depends_on = [azurerm_role_assignment.acr_pull]
 }
 
-# The Managed Identity only receives 'Read' permissions (Least-Privilege)
-resource "azurerm_role_assignment" "vault_access" {
-  scope                = azurerm_key_vault.main.id
-  role_definition_name = "Key Vault Secrets User"
-  principal_id         = azurerm_container_app.app.identity[0].principal_id
+# Frontend UI Container App: Resident & Admin Portal
+resource "azurerm_container_app" "frontend" {
+  name                         = "ui-${var.project_name}"
+  container_app_environment_id = azurerm_container_app_environment.env.id # Defined in other .tf files
+  resource_group_name          = azurerm_resource_group.rg.name           # Defined in other .tf files
+  revision_mode                = "Single"
+
+  # ACR Puller identity
+  identity {
+    type         = "SystemAssigned, UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.acr_puller.id]
+  }
+
+  registry {
+    server   = azurerm_container_registry.acr.login_server
+    identity = azurerm_user_assigned_identity.acr_puller.id
+  }
+
+  template {
+    container {
+      name   = "ui-service"
+      image  = "${azurerm_container_registry.acr.login_server}/councilconnect-ui:latest"
+      cpu    = 0.25
+      memory = "0.5Gi"
+
+      # Injecting the Backend FQDN as an environment variable (Service Discovery)
+      env {
+        name = "BACKEND_URL"
+        # Explicitly referencing the backend container app created in compute.tf
+        value = "https://${azurerm_container_app.app.ingress[0].fqdn}"
+      }
+
+      # Deployment metadata for Sprint 9 Blue/Green logic
+      env {
+        name  = "APP_VERSION"
+        value = "v1.0-stable"
+      }
+    }
+
+    min_replicas = 0  # Scale to zero when inactive (K4)
+    max_replicas = 10 # Should match backend's ceiling
+
+    # Scaling logic to prevent bottlenecks
+    http_scale_rule {
+      name                = "scale-on-requests"
+      concurrent_requests = "20"
+    }
+  }
+
+  ingress {
+    external_enabled = true # Public internet access
+    target_port      = 8501
+    traffic_weight {
+      percentage      = 100
+      latest_revision = true
+    }
+  }
+
+  # Ensure role assignment exists before deployment
+  depends_on = [azurerm_role_assignment.acr_pull]
 }
