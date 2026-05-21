@@ -2,16 +2,16 @@
 name: Core CI-CD Automation Pipeline
 
 on:
-  # Triggered only with these scenarios
+  # Triggered only in these scenarios and changes to these paths.
   push:
     branches: [ main ]
-    paths: [ 'infra/**', 'app/**', 'frontend/**', 'tests/**', 'Dockerfile', 'requirements.txt' ] # Triggers when infrastructure or any application files change
+    paths: [ 'infra/**', 'app/**', 'frontend/**', 'scraper/**', 'tests/**', 'docker/**', 'requirements.txt' ]
   pull_request:
     branches: [ main ]
-    paths: [ 'infra/**', 'app/**', 'frontend/**', 'tests/**', 'Dockerfile', 'requirements.txt' ]
+    paths: [ 'infra/**', 'app/**', 'frontend/**', 'scraper/**', 'tests/**', 'docker/**', 'requirements.txt' ]
 
 concurrency:
-  group: deployment-${{ github.ref }} # Group concurrent runs (github.ref is branch or PR identifier) to prevent multiple Terraform runs on same branch/PR
+  group: deployment-${{ github.ref }} # Group concurrent runs (github.ref is branch or PR identifier) to prevent multiple Terraform runs on same branch/PR.
   cancel-in-progress: false # Prevents stalled runs from being cancelled.
 
 permissions:
@@ -31,11 +31,11 @@ jobs:
   # =========================================================================
   quality-check:
     name: quality-check (${{ matrix.python-version }})
-    runs-on: ubuntu-latest # Ephemeral GitHub-hosted runner (containerised VM)
+    runs-on: ubuntu-latest # Ephemeral GitHub-hosted runner (containerised VM).
     strategy:
-      fail-fast: true # Stops all matrix runs immediately if any single version fails
+      fail-fast: true # Stops all matrix runs immediately if any single version fails.
       matrix:
-        python-version: ['3.11', '3.14']
+        python-version: ['3.11', '3.14']  # Tests against these common Python versions to ensure compatibility and catch version-specific issues early.
 
     defaults:
       run:
@@ -70,19 +70,19 @@ jobs:
         with:
           name: html-coverage-report-py${{ matrix.python-version }}
           path: htmlcov/
-        if: always() # Ensures test results are recorded even if previous testing checks failed
+        if: always() # Ensures test results are recorded even if previous testing checks failed.
 
   # =========================================================================
   # STAGE 2: INFRASTRUCTURE MANAGEMENT (TERRAFORM AUTOMATION)
   # =========================================================================
   terraform:
     name: 'Terraform Automation'
-    runs-on: ubuntu-latest  # Ephemeral GitHub-hosted runner (containerised VM)
-    needs: quality-check # Strict Gateway: Python quality tests must pass before infra changes can be evaluated
+    runs-on: ubuntu-latest  # Ephemeral GitHub-hosted runner (containerised VM).
+    needs: quality-check # Strict Gateway: Python quality tests must pass before infra changes can be evaluated.
     
     defaults:
       run:
-        working-directory: ./infra  # All commands run in infra/ directory
+        working-directory: ./infra  # All commands run in infra/ directory.
 
     steps:
       - name: Checkout Repository
@@ -107,7 +107,7 @@ jobs:
       - name: Terraform Validate
         run: terraform validate
 
-      # Reconciles existing manual role assignments with remote state storage (e.g., prevent 409 errors in terraform)
+      # Reconciles (claims) existing manual role assignments with remote state storage (e.g., prevent 409 errors in terraform).
       - name: Reconcile Drift and Existing Access Roles
         run: |
           echo "Inspecting state tracking tables for existing roles..."
@@ -120,13 +120,13 @@ jobs:
             terraform import azurerm_role_assignment.sp_vault_access /subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/rg-councilconnect-ai/providers/Microsoft.KeyVault/vaults/kv-councilconnect-ai/providers/Microsoft.Authorization/roleAssignments/f4701a18102649a3a258e96d0dbdd9fd || true
           fi
 
-      # Comparison: State file (gets current infra state) and compares against .tf files
+      # Comparison: State file (gets current infra state) and compares against .tf files.
       - name: Terraform Plan
         id: plan
         run: terraform plan -no-color -out=tfplan
 
       - name: Terraform Apply
-        # Apply changes only for main branch merge (push)
+        # Apply changes only for main branch merge (push).
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: terraform apply -auto-approve tfplan
 
@@ -136,35 +136,35 @@ jobs:
   application-deployment:
     name: Build, Push & Rollout Application Images
     runs-on: ubuntu-latest
-    needs: terraform # Infrastructure changes must be completed before new app builds run
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' # Runs exclusively on pushes to main branch
+    needs: terraform # Infrastructure changes must be completed before new app builds run.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' # Runs exclusively on pushes to main branch.
 
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      # Logs into Azure using the Service Principal credentials stored in the repository secrets
+      # Logs into Azure using the Service Principal credentials stored in the repository secrets.
       - name: Authenticate to Azure CLI
         uses: azure/login@v2
         with:
           creds: '{"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}"}'
 
-      # Authenticates the pipeline agent to push images to the specific Azure Container Registry instance
+      # Authenticates the pipeline agent to push images to the specific Azure Container Registry instance.
       - name: Authenticate to Private Registry (ACR)
         run: |
           az acr login --name acrcouncilconnectai
 
       - name: Build and Push Core AI Backend Engine Image
         run: |
-          docker build -t acrcouncilconnectai.azurecr.io/app-backend:${{ github.sha }} .
+          docker build -f docker/backend.Dockerfile -t acrcouncilconnectai.azurecr.io/app-backend:${{ github.sha }} .
           docker push acrcouncilconnectai.azurecr.io/app-backend:${{ github.sha }}
 
       - name: Build and Push Resident Frontend Interface Image
         run: |
-          docker build -t acrcouncilconnectai.azurecr.io/app-frontend:${{ github.sha }} -f ./frontend/Dockerfile .
+          docker build -f docker/frontend.Dockerfile -t acrcouncilconnectai.azurecr.io/app-frontend:${{ github.sha }} .
           docker push acrcouncilconnectai.azurecr.io/app-frontend:${{ github.sha }}
 
-      # Automatically executes the container app update steps to seamlessly switch traffic to the new features
+      # Automatically executes the container app update steps to seamlessly switch traffic to the new features.
       - name: Propagate Live Container App Infrastructure Updates
         run: |
           az containerapp update \
