@@ -1,10 +1,10 @@
-import os   # Used for accessing environment variables, allowing for secure configuration without hardcoding sensitive information.
-import azure.identity   # Provides various credential classes for authenticating with Azure services (e.g., Managed Identity).
+import os                       # Used for accessing environment variables, allowing for secure configuration without hardcoding sensitive information.
+import azure.identity           # Provides various credential classes for authenticating with Azure services (e.g., Managed Identity).
 import azure.keyvault.secrets   # For interacting with Azure Key Vault to retrieve secrets securely at runtime.
-import logging  # Enables logging for better visibility and debugging.
-import uuid             # Generates unique IDs for vector points.
-import qdrant_client    # Assists in connecting to / interacting with the Qdrant vector database.
-import qdrant_client.models # Contains helper classes (models) that define the 'rules' for our data structure.
+import logging                  # Enables logging for better visibility and debugging.
+import uuid                     # Generates unique IDs for vector points.
+import qdrant_client            # Assists in connecting to / interacting with the Qdrant vector database.
+import qdrant_client.models     # Contains helper classes (models) that define the 'rules' for our data structure.
 
 # Initialise logging for better visibility in Azure Monitor
 logging.basicConfig(level=logging.INFO) # Set logging level to INFO (value >= 20) to capture informational messages and above (warnings, errors, critical).
@@ -50,6 +50,8 @@ class VectorStoreManager: # A class is more efficient for managing state (e.g., 
     """
 
     def __init__(self, collection_name="council_knowledge"): # Auto-called (__init__) and linked to instance memory (via 'self') with default value (council_knowledge).
+
+        self.collection_name = collection_name
 
         # Initialise our secret manager tool to look up database connection keys.
         secrets = SecretManager()
