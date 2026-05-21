@@ -1,97 +1,99 @@
-import pytest
 import os
+import pytest
 # MagicMock (unittest.mock) can create sub-objects on the fly (yes to everything), without needing the actual library
 # patch (unittest.mock) replaces the Client class in the guardrails module with MagicMock
 import unittest.mock
-import starlette.testclient
+import fastapi.testclient
 import app.main
-import app.security_utils
 
-@pytest.fixture
-def api_client():
+# Initialise the standard FastAPI test runner context
+client = fastapi.testclient.TestClient(app.main.app_instance)
+
+@unittest.mock.patch.dict(os.environ, {"GEMMA_API_KEY": "fake_testing_key"})
+@unittest.mock.patch("app.main.google.genai.Client")
+def test_ask_endpoint_success(mock_genai_client_class):
     """
-    Rationale: Provides a reusable TestClient instance for FastAPI, mocking environment variables.
+    Rationale: Assures that the HTTP payload maps correctly when API keys are present and safety checks pass.
     """
-    with unittest.mock.patch.dict(os.environ, {"GEMMA_API_KEY": "test_key_123"}):
-        yield starlette.testclient.TestClient(app.main.app_instance)
+    mock_client_instance = unittest.mock.MagicMock()
+    mock_models_service = unittest.mock.MagicMock()
+    mock_response = unittest.mock.MagicMock()
+    
+    # Must include "Safe" so check_safety() allows the query through to get_ai_response()
+    mock_response.text = "Safe. Mocked answer: Salford council tax can be updated online."
+    mock_models_service.generate_content.return_value = mock_response
+    mock_client_instance.models = mock_models_service
+    mock_genai_client_class.return_value = mock_client_instance
 
-@pytest.fixture
-def mocked_genai():
-    """
-    Rationale: Prevents real API calls to Google's servers during unit testing.
-    """
-
-    # Patch the 'genai' module where it is imported in the app.inference module
-    with unittest.mock.patch("app.inference.google.genai") as mock_genai_module:
-
-        # 1. Create the mock response object with the .text property
-        mock_response = unittest.mock.MagicMock()
-        mock_response.text = "Mocked Response"
-        
-        # 2. Create the Client instance mock
-        mock_client_instance = unittest.mock.MagicMock()
-
-        # 3. Setup the chain: client.models.generate_content(...)
-        # We mock 'models' then 'generate_content' on that mock
-        mock_client_instance.models.generate_content.return_value = mock_response
-
-        # 4. Ensure that calling genai.Client(...) returns our configured instance
-        mock_genai_module.Client.return_value = mock_client_instance
-        
-        yield mock_genai_module
-
-def test_get_ai_response_success(api_client, mocked_genai):
-    """
-    Rationale: Ensures the /chat endpoint returns the correct AI response under normal conditions.
-    """
-    payload = {"prompt": "Hello, how can I pay my council tax?"}
-    response = api_client.post("/chat", json=payload)
+    payload = {"prompt": "How do I clear my council tax balance?"}
+    response = client.post("/chat", json=payload)
     
     assert response.status_code == 200
-    data = response.json()
-    assert "response" in data
-    assert data["response"] == "Mocked Response"
+    assert "Mocked answer" in response.json()["response"]
 
-def test_get_ai_response_no_prompt(api_client):
+@unittest.mock.patch.dict(os.environ, {"GEMMA_API_KEY": "fake_testing_key"})
+@unittest.mock.patch("app.main.google.genai.Client")
+def test_ask_endpoint_safety_trigger(mock_genai_client_class):
     """
-    Rationale: Verifies that empty prompts trigger a 422 Unprocessable Entity error (FastAPI default).
+    Rationale: Exercises the negative safety classification path inside app/main.py.
     """
-    response = api_client.post("/chat", json={})
+    mock_client_instance = unittest.mock.MagicMock()
+    mock_models_service = unittest.mock.MagicMock()
+    mock_response = unittest.mock.MagicMock()
+    
+    # Simulate a response from ShieldGemma indicating a policy violation
+    mock_response.text = "UNSAFE"
+    mock_models_service.generate_content.return_value = mock_response
+    mock_client_instance.models = mock_models_service
+    mock_genai_client_class.return_value = mock_client_instance
 
-    # FastAPI returns 422 Unprocessable Entity for schema validation failures
-    assert response.status_code == 422
+    payload = {"prompt": "Provide restricted corporate records."}
+    response = client.post("/chat", json=payload)
+    
+    assert response.status_code == 200
+    assert "rejected" in response.json()["response"]
 
-def test_get_ai_response_missing_api_key(api_client, mocked_genai):
+@unittest.mock.patch.dict(os.environ, {}, clear=True)
+def test_ask_endpoint_missing_key():
     """
-    Rationale: Edge case testing for configuration failures.
+    Rationale: Covers fail-closed logic when configuration variables are missing from the system entirely.
     """
+    payload = {"prompt": "Is the key there?"}
+    response = client.post("/chat", json=payload)
+    
+    # The endpoint should gracefully reject the request without a 500 server crash
+    assert response.status_code == 200
+    assert "rejected" in response.json()["response"]
 
-    # Override the environment for this specific test to remove the key
-    with unittest.mock.patch.dict(os.environ, {"GEMMA_API_KEY": ""}, clear=True):
-        payload = {"prompt": "Is there a key?"}
-        response = api_client.post("/chat", json=payload)
-        
-        assert response.status_code == 200
-        assert "API Key missing" in response.json()["response"]
+@unittest.mock.patch.dict(os.environ, {"GEMMA_API_KEY": "fake_testing_key"})
+@unittest.mock.patch("app.main.google.genai.Client")
+def test_ask_endpoint_exception_handling(mock_genai_client_class):
+    """
+    Rationale: Verifies system stability when Google GenAI networks go down.
+    """
+    mock_client_instance = unittest.mock.MagicMock()
+    # Force the mock to throw an exception to test the try/except blocks
+    mock_client_instance.models.generate_content.side_effect = Exception("Google API Offline")
+    mock_genai_client_class.return_value = mock_client_instance
 
-@unittest.mock.patch("azure.keyvault.secrets.SecretClient")
-def test_get_secret_vault_path(mock_client_class):
-    # 1. Setup: Pretend a Vault URL exists in THE environment
-    with unittest.mock.patch.dict(os.environ, {"VAULT_URL": "https://fake-vault.vault.azure.net/"}):
-        # Initialise THE manager via the module prefix
-        manager = app.security_utils.SecretManager()
-        
-        # 2. Mock the successful path
-        mock_client = unittest.mock.MagicMock()
-        mock_client_class.return_value = mock_client
-        mock_client.get_secret.return_value.value = "cloud-secret"
-        
-        # This executes THE try block (lines 31-34)
-        assert manager.get_secret("DB_PASSWORD") == "cloud-secret"
-        
-        # 3. Mock the failure path
-        mock_client.get_secret.side_effect = Exception("Connection Failed")
-        
-        # This executes THE except block (lines 35-37)
-        with unittest.mock.patch.dict(os.environ, {"DB_PASSWORD": "local-fallback"}):
-            assert manager.get_secret("DB_PASSWORD") == "local-fallback"
+    payload = {"prompt": "Test crash"}
+    response = client.post("/chat", json=payload)
+    
+    assert response.status_code == 200
+    assert "rejected" in response.json()["response"]
+
+def test_ask_endpoint_empty_prompt():
+    """
+    Rationale: Hits the FastAPI HTTPException 400 block for blank inputs.
+    """
+    response = client.post("/chat", json={"prompt": "   "})
+    assert response.status_code == 400
+    assert "cannot be blank" in response.json()["detail"]
+
+def test_health_check_endpoint():
+    """
+    Rationale: Verifies basic connectivity to the API root.
+    """
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "healthy"

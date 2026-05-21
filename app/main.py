@@ -21,7 +21,7 @@ class QueryRequest(pydantic.BaseModel): # Any object created using class 'QueryR
 
 
 def check_safety(user_query: str) -> bool:  # Input string, return boolean
-"""Evaluates text queries utilising ShieldGemma classification models to ensure policy compliance."""
+    """Evaluates text queries utilising ShieldGemma classification models to ensure policy compliance."""
 
     secrets = app.database.SecretManager()  # Initialise the manager to fetch the key securely.
     api_key = secrets.get_secret("GEMMA_API_KEY")
