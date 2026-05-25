@@ -34,7 +34,7 @@ resource "azurerm_container_app" "app" {
   template {
     container {
       name   = "api-gateway"
-      image  = "${azurerm_container_registry.acr.login_server}/councilconnect-ai:latest"
+      image  = "${azurerm_container_registry.acr.login_server}/councilconnect-backend:latest"
       cpu    = 0.25
       memory = "0.5Gi"
 
@@ -107,7 +107,7 @@ resource "azurerm_container_app" "frontend" {
   template {
     container {
       name   = "ui-service"
-      image  = "${azurerm_container_registry.acr.login_server}/councilconnect-ui:latest"
+      image  = "${azurerm_container_registry.acr.login_server}/councilconnect-frontend:latest"
       cpu    = 0.25
       memory = "0.5Gi"
 

@@ -156,13 +156,13 @@ jobs:
 
       - name: Build and Push Core AI Backend Engine Image
         run: |
-          docker build -f docker/backend.Dockerfile -t acrcouncilconnectai.azurecr.io/app-backend:${{ github.sha }} .
-          docker push acrcouncilconnectai.azurecr.io/app-backend:${{ github.sha }}
+          docker build -f docker/backend.Dockerfile -t acrcouncilconnectai.azurecr.io/councilconnect-backend:${{ github.sha }} .
+          docker push acrcouncilconnectai.azurecr.io/councilconnect-backend:${{ github.sha }}
 
       - name: Build and Push Resident Frontend Interface Image
         run: |
-          docker build -f docker/frontend.Dockerfile -t acrcouncilconnectai.azurecr.io/app-frontend:${{ github.sha }} .
-          docker push acrcouncilconnectai.azurecr.io/app-frontend:${{ github.sha }}
+          docker build -f docker/frontend.Dockerfile -t acrcouncilconnectai.azurecr.io/councilconnect-frontend:${{ github.sha }} .
+          docker push acrcouncilconnectai.azurecr.io/councilconnect-frontend:${{ github.sha }}
 
       # Automatically executes the container app update steps to seamlessly switch traffic to the new features.
       - name: Propagate Live Container App Infrastructure Updates
@@ -170,9 +170,9 @@ jobs:
           az containerapp update \
             --name app-councilconnect-ai \
             --resource-group rg-councilconnect-ai \
-            --image acrcouncilconnectai.azurecr.io/app-backend:${{ github.sha }}
+            --image acrcouncilconnectai.azurecr.io/councilconnect-backend:${{ github.sha }}
 
           az containerapp update \
             --name frontend-councilconnect-ai \
             --resource-group rg-councilconnect-ai \
-            --image acrcouncilconnectai.azurecr.io/app-frontend:${{ github.sha }}
+            --image acrcouncilconnectai.azurecr.io/councilconnect-frontend:${{ github.sha }}
