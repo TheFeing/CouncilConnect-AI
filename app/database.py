@@ -28,19 +28,19 @@ class SecretManager:
 		Falls back to local env variables if values not found, ensuring app can still run in dev env.
         """
 
-        normalized_name = secret_name.replace("-", "_").upper() # Standardise input names into strict uppercase underscores to prevent path or key mismatches.
+        vault_secret_name = secret_name.replace("_", "-").upper()   # Standardise secret names to match Vault naming conventions.
+        env_secret_name = secret_name.replace("-", "_").upper()    # Standardise secret names to match environment variable naming conventions.
 
         if not self.vault_url:
-            logger.warning(f"Warning: VAULT_URL not found. Falling back to local env for {secret_name}")
-            return os.getenv(normalized_name, "")
+            return os.getenv(env_secret_name, "")
             
         try:
             client = azure.keyvault.secrets.SecretClient(vault_url=self.vault_url, credential=self.credential)	# Create client instance for the Key Vault using the vault URL & credential.
-            retrieved_secret = client.get_secret(normalized_name)
+            retrieved_secret = client.get_secret(vault_secret_name)
             return retrieved_secret.value	# Runtime fetching in RAM only, never stored elsewhere.
         except Exception as error:
-            logger.error(f"Cloud Vault retrieval failed for {normalized_name}. Falling back to local env. Error: {error}")
-            return os.getenv(normalized_name, "")
+            logger.error(f"Cloud Vault retrieval failed for {vault_secret_name}. Falling back to local env. Error: {error}")
+            return os.getenv(env_secret_name, "")
 
 
 class VectorStoreManager: # A class is more efficient for managing state (e.g., DB connections) and encapsulating related functionality.
