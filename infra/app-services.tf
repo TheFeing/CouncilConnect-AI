@@ -7,6 +7,18 @@ data "azurerm_key_vault_secret" "gemma_key" {
   key_vault_id = azurerm_key_vault.main.id
 }
 
+# Fetches the authenticated Qdrant cluster access token from Key Vault
+data "azurerm_key_vault_secret" "qdrant_key" {
+  name         = "QDRANT-API-KEY"
+  key_vault_id = azurerm_key_vault.main.id
+}
+
+# Fetches the external Qdrant Cloud SaaS cluster URL endpoint from Key Vault
+data "azurerm_key_vault_secret" "qdrant_url" {
+  name         = "QDRANT-URL"
+  key_vault_id = azurerm_key_vault.main.id
+}
+
 # Backend Container App: Scraping and Vector engine
 resource "azurerm_container_app" "app" {
   name                         = "app-${var.project_name}"
@@ -30,6 +42,16 @@ resource "azurerm_container_app" "app" {
     value = data.azurerm_key_vault_secret.gemma_key.value
   }
 
+  secret {
+    name  = "qdrant-api-key"
+    value = data.azurerm_key_vault_secret.qdrant_key.value
+  }
+
+  secret {
+    name  = "qdrant-url"
+    value = data.azurerm_key_vault_secret.qdrant_url.value
+  }
+
   # Desired state: Container blueprint
   template {
     container {
@@ -39,7 +61,7 @@ resource "azurerm_container_app" "app" {
       memory = "0.5Gi"
 
       env {
-        name  = "VAULT_URL" # Must match the name Python code looks for
+        name  = "AZURE_KEY_VAULT_ENDPOINT" # Matches what Python code scans for
         value = azurerm_key_vault.main.vault_uri
       }
 
@@ -49,6 +71,18 @@ resource "azurerm_container_app" "app" {
         secret_name = "gemma-api-key"
       }
 
+      # Inject the external cluster URL directly into the environment parameters
+      env {
+        name        = "QDRANT_URL"
+        secret_name = "qdrant-url"
+      }
+
+      # Inject the external cloud access token directly into the environment parameters
+      env {
+        name        = "QDRANT_API_KEY"
+        secret_name = "qdrant-api-key"
+      }
+
       env {
         name  = "APPLICATIONINSIGHTS_CONNECTION_STRING"
         value = azurerm_application_insights.app_insights.connection_string
@@ -56,7 +90,7 @@ resource "azurerm_container_app" "app" {
     }
 
     # KEDA Scaling: Logic to manage replicas based on traffic
-    min_replicas = 0 # Scale-to-Zero: Cost is £0 when not in use
+    min_replicas = 0  # Scale-to-Zero: Cost is £0 when not in use
     max_replicas = 10
 
     http_scale_rule {
@@ -72,14 +106,9 @@ resource "azurerm_container_app" "app" {
 
     # Routing instruction (e.g., Blue/Green deployment traffic)
     traffic_weight {
-      percentage = 100
-      # revision_name = "app-v1-blue"
+      percentage      = 100
       latest_revision = true
     }
-    # traffic_weight {
-    #   revision_name = "app-v2-green"
-    #   percentage    = 10
-    # }
   }
 
   # Makes sure Role Assignment is ready first
@@ -113,8 +142,7 @@ resource "azurerm_container_app" "frontend" {
 
       # Injecting the Backend FQDN as an environment variable (Service Discovery)
       env {
-        name = "BACKEND_URL"
-        # Explicitly referencing the backend container app created in compute.tf
+        name  = "BACKEND_URL"
         value = "https://${azurerm_container_app.app.ingress[0].fqdn}"
       }
 

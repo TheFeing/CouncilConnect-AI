@@ -11,7 +11,7 @@ import pypdf                    # For extracting raw plaintext sequences from up
 import io                       # For managing in-memory byte streams during upload processing
 import scraper.crawler          # Custom module for executing domain crawling tasks
 import scraper.redactor         # Custom module for identifying and scrubbing PII datasets
-
+import os                       # For environment variable access to configuration parameters
 
 # Configure application logging to print runtime operational signals to the console, which can be captured by Azure Monitor for observability.
 logging.basicConfig(level=logging.INFO)
@@ -27,15 +27,21 @@ async def lifespan(fastapi_app: fastapi.FastAPI):
     logger.info("Initialising global infrastructure components during application startup...")
     
     try:
-        secrets = app.database.SecretManager()  # Initialise the manager to fetch the key securely.
-        api_key = secrets.get_secret("GEMMA_API_KEY")
+        # First, scan the local container environment directly for the key mounted by Terraform
+        api_key = os.getenv("GEMMA_API_KEY")
+        
+        # Fall back to live SecretManager lookup only if the container variable is missing
+        if not api_key:
+            logger.info("GEMMA_API_KEY not found in container environment. Attempting fallback Azure Key Vault live API request...")
+            secrets = app.database.SecretManager()
+            api_key = secrets.get_secret("GEMMA-API-KEY")
         
         if api_key:
             # Communication bridge between script and GenAI SDK managed globally for reuse.
             ai_client = google.genai.Client(api_key=api_key)
-            logger.info("Persistent Google GenAI client successfully established.")
+            logger.info("Persistent Google GenAI client successfully established utilising environment secret mounts.")
         else:
-            logger.error("Gemini execution blocked: GEMMA_API_KEY is unassigned. Failing closed for protection.")
+            logger.error("Gemini execution blocked: Gemma API key could not be resolved from environment or Vault. Failing closed.")
     except Exception as initialisation_error:
         logger.critical(f"Critical execution error triggered during initialisation phase: {initialisation_error}")
         
@@ -148,31 +154,47 @@ async def chat(request: QueryRequest):  # Define non-blocking background functio
         # Execute closeness lookup matching the incoming user query vector profile against indexed assets.
         matched_points = vector_manager.search_similar(clean_prompt, limit=3)
         
-        # Construct reference knowledge blocks from database payload text variables.
-        reference_context_blocks = []
-        for point in matched_points:
-            if point.payload and "text" in point.payload:
-                reference_context_blocks.append(f"- Context Source ({point.payload.get('source', 'Unknown')}):\n{point.payload['text']}")
-                
-        compiled_knowledge_context = "\n\n".join(reference_context_blocks)
-        
-        # Build the augmented prompt template forcing constraints onto the model's output generation boundaries.
-        augmented_rag_prompt = (
-            f"You are a helpful customer support assistant for Salford City Council.\n"
-            f"Use ONLY the following verified local council knowledge contexts to formulate your response.\n"
-            f"If the answer cannot be found in the provided contexts, politely explain that the information is missing from the database records.\n"
-            f"Maintain an authoritative, objective, and supportive town hall customer service tone. Do not make references to unrelated entities.\n\n"
-            f"Verified Local Council Knowledge Context:\n"
-            f"{compiled_knowledge_context if compiled_knowledge_context else '[No relevant corporate context discovered in vector store]'}\n\n"
-            f"Resident Query: {clean_prompt}\n"
-            f"Official Response:"
-        )
+        # CONDITIONAL SWITCHING FORK: Evaluate if corporate context blocks exist within the database query array
+        if matched_points and len(matched_points) > 0:
+            logger.info(f"Context discovered. Processing vector-augmented RAG layout utilising {len(matched_points)} reference nodes.")
+            
+            # Construct reference knowledge blocks from database payload text variables.
+            reference_context_blocks = []
+            for point in matched_points:
+                if point.payload and "text" in point.payload:
+                    reference_context_blocks.append(f"- Context Source ({point.payload.get('source', 'Unknown')}):\n{point.payload['text']}")
+                    
+            compiled_knowledge_context = "\n\n".join(reference_context_blocks)
+            
+            # Build the augmented prompt template forcing constraints onto the model's output generation boundaries.
+            augmented_prompt = (
+                f"You are a helpful customer support assistant for Salford City Council.\n"
+                f"Use ONLY the following verified local council knowledge contexts to formulate your response.\n"
+                f"If the answer cannot be found in the provided contexts, politely explain that the information is missing from the database records.\n"
+                f"Maintain an authoritative, objective, and supportive town hall customer service tone. Do not make references to unrelated entities.\n\n"
+                f"Verified Local Council Knowledge Context:\n"
+                f"{compiled_knowledge_context}\n\n"
+                f"Resident Query: {clean_prompt}\n"
+                f"Official Response:"
+            )
+        else:
+            logger.warning("Qdrant vector similarity search returned zero metrics. Switching engine execution over to General AI Search fallback path.")
+            
+            # Build an alternative instruction template that permits general model knowledge access while preserving institutional boundaries.
+            augmented_prompt = (
+                f"You are a helpful customer support assistant for Salford City Council.\n"
+                f"No specific database documents matched this enquiry locally. Formulate a helpful, accurate, general response "
+                f"addressing the topic using broad knowledge, while advising the resident to contact Salford City Council directly "
+                f"for official case-specific administrative adjustments and confirmation.\n\n"
+                f"Resident Query: {clean_prompt}\n"
+                f"Official Response:"
+            )
         
         logger.info("Successfully calculated context overlays. Forwarding augmented prompt template out to streaming engine.")
         
         # Return a high-performance streaming response chunked over HTTP to ensure a minimal Time-to-First-Token footprint for the client interface.
         return fastapi.responses.StreamingResponse(
-            get_ai_response_stream(augmented_rag_prompt),
+            get_ai_response_stream(augmented_prompt),
             media_type="text/plain"
         )
         
