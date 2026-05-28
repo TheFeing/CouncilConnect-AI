@@ -1,95 +1,214 @@
 import streamlit    # For frontend UI rendering
 import requests     # For making HTTP requests to the backend API gateway
 import os           # For accessing environment variables for configuration
+import platform     # For retrieving the node name for version display
 import logging      # For logging application events and errors
 
 # Configure local logging infrastructure for the frontend UI layer.
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Fetch the backend service URL location from container environment variables.
-# Defaulting to localhost if running outside of the Azure Container App environment.
-BACKEND_TARGET = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
+# 1. Configuration fetched from environment variables
+# These are injected via Terraform to allow the UI to find the API
+BACKEND_URL = os.getenv("BACKEND_URL", "http://api-gateway:8000")
+VERSION = os.getenv("APP_VERSION", "v1.0-stable")
+IS_BETA = "beta" in VERSION.lower()
 
 streamlit.set_page_config(
-    page_title="Council Resident Support AI",
-    page_icon="🤖",
-    layout="centered"
+    page_title="Salford City Council - Resident Support Prototype",
+    page_icon="🏛️",
+    layout="wide"
 )
 
-streamlit.title("🤖 Council Resident Support AI")
-streamlit.caption("Automated assistance hub for local resident queries, compliance routing, and general council guidance.")
-
-# --- Browser Session State Initialisation ---
-# Because web interactions are stateless, Streamlit uses streamlit.session_state to keep chat history alive inside the browser tab memory container.
-if "conversation_history" not in streamlit.session_state:
-    streamlit.session_state.conversation_history = []
-
-# Display previous conversation dialogue entries stored in browser memory cache.
-for conversation_turn in streamlit.session_state.conversation_history:
-    with streamlit.chat_message(conversation_turn["role"]):
-        streamlit.markdown(conversation_turn["content"])
-
-# --- Main Interaction Input Component ---
-if user_input_prompt := streamlit.chat_input("How can the council assist with an enquiry today?"):
+# 2. Custom CSS Injection (Branding & Disclaimer)
+# Mimicking the Salford City Council colour palette and typography
+streamlit.markdown(f"""
+    <style>
+    /* Main background and branding */
+    .main {{ background-color: #f8f9fa; }}
+    .stHeader {{ background-color: #98002E; color: white; padding: 1.5rem; }}
     
-    # 1. Instantly render the citizen's query locally in the UI window.
-    with streamlit.chat_message("user"):
-        streamlit.markdown(user_input_prompt)
-        
-    # Append the user turn to browser memory cache so it survives the next re-run event.
-    streamlit.session_state.conversation_history.append({"role": "user", "content": user_input_prompt})
+    /* Project Disclaimer Banner (Crucial for Assessment) */
+    .disclaimer-banner {{
+        background-color: #ffcc00;
+        color: black;
+        padding: 15px;
+        text-align: center;
+        font-weight: bold;
+        border-bottom: 2px solid #000;
+        margin-bottom: 25px;
+        font-size: 1.1rem;
+    }}
+    
+    /* System version footprint styling */
+    .footer-version {{
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background-color: #ffffff;
+        color: #6c757d;
+        text-align: center;
+        padding: 5px;
+        font-size: 0.8rem;
+        border-top: 1px solid #dee2e6;
+        z-index: 999;
+    }}
+    </style>
+""", unsafe_allow_html=True)
 
-# 2. Trigger communication lane to the FastAPI backend container.
-    with streamlit.chat_message("assistant"):
-        response_placeholder = streamlit.empty()
-        
-        # Package payload packet according to the strict QueryRequest Pydantic template rules.
-        request_payload = {"prompt": user_input_prompt}
-        target_endpoint = f"{BACKEND_TARGET}/chat"
-        
-        try:
-            logger.info(f"Transmitting operational payload packet to endpoint target: {target_endpoint}")
+# 3. Structural Header Construction across every interface option
+streamlit.markdown('<div class="disclaimer-banner">⚠️ ACADEMIC DEVELOPMENT PROTOTYPE — NOT FOR PRODUCTION PUBLIC DEPLOYMENT</div>', unsafe_allow_html=True)
+
+streamlit.markdown("""
+    <div style="background-color: #98002E; padding: 20px; border-radius: 5px; margin-bottom: 25px;">
+        <h1 style="color: white; margin: 0;">🏛️ Salford City Council</h1>
+        <p style="color: #ffcccc; margin: 5px 0 0 0;">AI Resident Support & Knowledge Management Portal</p>
+    </div>
+""", unsafe_allow_html=True)
+
+# 4. Multi-Page Panel Controller System inside the Sidebar (The Preferred Design)
+streamlit.sidebar.title("Control Dashboard")
+streamlit.sidebar.write("Switch between public chat assistance and administrative knowledge bootstrapping.")
+selected_view = streamlit.sidebar.radio("Navigation View Select:", ["Resident Support Assistant", "Knowledge Administration Workspace"])
+
+# Global session dictionary buffer container initialisation
+if "messages" not in streamlit.session_state:
+    streamlit.session_state.messages = []
+
+
+# =====================================================================
+# INTERFACE SUB-SYSTEM A: RESIDENT SUPPORT ASSISTANT (CHAT MODALITY)
+# =====================================================================
+if selected_view == "Resident Support Assistant":
+    streamlit.subheader("💬 Resident Support Assistant")
+    streamlit.write("Ask questions about waste collection, council tax adjustments, or local public library services.")
+    
+    # Render historical chat records dynamically from memory arrays
+    for context_turn in streamlit.session_state.messages:
+        with streamlit.chat_message(context_turn["role"]):
+            streamlit.markdown(context_turn["content"])
             
-            # Post the data across the private network bridge container boundary, enabling stream tracking.
-            with requests.post(
-                target_endpoint,
-                json=request_payload,
-                stream=True,  # Keeps the data link open to receive token chunks incrementally
-                timeout=30.0  # Safe boundary window for upstream model processing latency.
-            ) as network_response:
+    # Capture fresh input strings from user interaction panels
+    if user_prompt_string := streamlit.chat_input("Enter your enquiry (e.g., How do I order a new bin?)"):
+        
+        # Display the local message trace inside the container
+        with streamlit.chat_message("user"):
+            streamlit.markdown(user_prompt_string)
+            
+        streamlit.session_state.messages.append({"role": "user", "content": user_prompt_string})
+        
+        # Deploy streaming network communication logic targeting the updated backend engine
+        with streamlit.chat_message("assistant"):
+            response_placeholder = streamlit.empty()
+            target_endpoint = f"{BACKEND_URL}/chat"
+            
+            try:
+                logger.info(f"Transmitting prompt packet to streaming gate target: {target_endpoint}")
                 
-                # Check for gateway perimeter errors or structural validation rejections.
-                if network_response.status_code == 200:
-                    final_ai_output = ""
+                # Execute standard HTTP POST action configured to hook chunks immediately as they exit the network buffers
+                with requests.post(
+                    target_endpoint,
+                    json={"prompt": user_prompt_string},
+                    stream=True,  # Blocks buffering actions to ensure continuous token output processing
+                    timeout=30.0  # Fails early if upstream model execution blocks completely
+                ) as backend_network_stream:
                     
-                    # Capture each text fragment directly from the incoming network interface as it arrives
-                    for chunk in network_response.iter_content(chunk_size=None, decode_unicode=True):
-                        if chunk:
-                            final_ai_output += chunk
-                            # Update the Streamlit UI immediately to provide near-zero latency text rendering
-                            response_placeholder.markdown(final_ai_output)
-                    
-                    # Commit final accumulated assistant turn to browser memory history cache.
-                    streamlit.session_state.conversation_history.append({"role": "assistant", "content": final_ai_output})
-                    
-                elif network_response.status_code == 403:
-                    # Explicitly handle the backend safety classification firewall response
-                    error_message = "⚠️ Query rejected: This request contains flags violating compliance safety parameters."
-                    response_placeholder.markdown(error_message)
-                    logger.warning("Backend security perimeter rejected the user query prompt contents.")
-                    
-                elif network_response.status_code == 422:
-                    error_message = "⚠️ UI Input validation mismatch: Payload structure rejected by backend gateway guard."
-                    response_placeholder.markdown(error_message)
-                    logger.error("FastAPI perimeter gate rejected frontend data format payload configuration.")
-                    
-                else:
-                    error_message = f"⚠️ Downstream service exception encountered. System status code: {network_response.status_code}"
-                    response_placeholder.markdown(error_message)
-                    logger.error(f"Unexpected endpoint transmission barrier state: {network_response.text}")
-                
-        except requests.exceptions.RequestException as network_error:
-            fallback_message = "❌ Service communication failure: Unable to establish a connection to the backend engine."
-            response_placeholder.markdown(fallback_message)
-            logger.critical(f"Network bridge connection sequence collapsed entirely: {str(network_error)}")
+                    if backend_network_stream.status_code == 200:
+                        accumulated_text_payload = ""
+                        
+                        # Read the incoming text chunks continuously as they are generated by the backend
+                        for dynamic_chunk in backend_network_stream.iter_content(chunk_size=None, decode_unicode=True):
+                            if dynamic_chunk:
+                                accumulated_text_payload += dynamic_chunk
+                                # Render text instantly on screen to reduce perceived latency
+                                response_placeholder.markdown(accumulated_text_payload)
+                                
+                        # Save the fully compiled string to the tab memory array cache
+                        streamlit.session_state.messages.append({"role": "assistant", "content": accumulated_text_payload})
+                        
+                    elif backend_network_stream.status_code == 403:
+                        # Explicit check for security policy compliance failures
+                        safety_violation_error = "⚠️ Query rejected: This request contains flags violating compliance safety parameters."
+                        response_placeholder.markdown(safety_violation_error)
+                        logger.warning("Upstream firewall module blocked the resident prompt entry content.")
+                        
+                    elif backend_network_stream.status_code == 422:
+                        structural_validation_error = "⚠️ UI Input validation mismatch: Payload structure rejected by backend gateway guard."
+                        response_placeholder.markdown(structural_validation_error)
+                        logger.error("FastAPI backend engine validation parser blocked the incoming JSON request schema format.")
+                        
+                    else:
+                        unexpected_http_error = f"⚠️ Downstream service exception encountered. System status code: {backend_network_stream.status_code}"
+                        response_placeholder.markdown(unexpected_http_error)
+                        logger.error(f"Endpoint transmission barrier state reached: {backend_network_stream.text}")
+                        
+            except requests.exceptions.RequestException as network_transmission_error:
+                communication_failure_fallback = "❌ Service communication failure: Unable to establish a connection to the backend engine."
+                response_placeholder.markdown(communication_failure_fallback)
+                logger.critical(f"Connection array link collapsed completely between interface layers: {str(network_transmission_error)}")
+
+
+# =====================================================================
+# INTERFACE SUB-SYSTEM B: KNOWLEDGE ADMINISTRATION WORKSPACE
+# =====================================================================
+else:
+    streamlit.subheader("⚙️ Knowledge Administration Workspace")
+    streamlit.info("Admin Privileges Authenticated: Ingest corporate documentation and framework guidelines into the Vector Database.")
+    
+    streamlit.subheader("Update Council Knowledge")
+    streamlit.write("Upload official PDF policies to index them into the Vector Database.")
+    
+    uploaded_file = streamlit.file_uploader("Upload Policy PDF Document", type=["pdf"])
+    
+    if uploaded_file is not None:
+        streamlit.info(f"File detected: {uploaded_file.name}")
+        if streamlit.button("Index and Redact Document"):
+            # Prepare the file for multipart upload to the backend
+            files = {'file': (uploaded_file.name, uploaded_file.getvalue(), 'application/pdf')}
+            with streamlit.spinner("Processing document (Redacting PII and generating embeddings)..."):
+                try:
+                    res = requests.post(f"{BACKEND_URL}/ingest", files=files, timeout=90)
+                    if res.status_code == 200:
+                        streamlit.success("Ingestion Complete: The AI is now updated with the new policy information.")
+                    else:
+                        streamlit.error(f"Ingestion failed with status: {res.status_code}")
+                except Exception as e:
+                    streamlit.error(f"Connection error to ingestion service: {e}")
+
+    streamlit.markdown("---")
+    
+    # --- Operational Web Crawling Subsystem Interface ---
+    streamlit.subheader("🌐 Automated Web Crawling Subsystem")
+    streamlit.write("Trigger spider tasks to parse and ingest text content layers from validated live council domain endpoints.")
+    
+    web_crawl_target_url = streamlit.text_input(
+        "Specify Target Council Domain Link Location:", 
+        placeholder="https://www.salford.gov.uk/bins-and-recycling/"
+    )
+    
+    if streamlit.button("Initialise Pipeline Crawling Spider"):
+        if web_crawl_target_url.strip():
+            with streamlit.spinner("Dispatching web spider pipeline configuration execution loops..."):
+                try:
+                    # Execute direct network route request targeting the freshly established endpoint path configuration
+                    res = requests.post(
+                        f"{BACKEND_URL}/crawl", 
+                        json={"url": web_crawl_target_url.strip()}, 
+                        timeout=90
+                    )
+                    if res.status_code == 200:
+                        streamlit.success("Web Crawl Complete: External data structures have been ingested into the vector repository.")
+                    else:
+                        streamlit.error(f"Crawling sequence halted with status code outcome: {res.status_code}")
+                except Exception as crawler_ui_error:
+                    streamlit.error(f"Connection exception block encountered during task dispatch sequence: {crawler_ui_error}")
+        else:
+            streamlit.error("Crawl initialisation blocked: Please specify a valid destination endpoint target URL string first.")
+
+# 6. Version Indicator
+# Using platform.node() to fix the AttributeError on Windows environment
+streamlit.markdown(
+    f'<div class="footer-version">CouncilConnect AI System: <b>{VERSION}</b> | Node: {platform.node()}</div>', 
+    unsafe_allow_html=True
+)

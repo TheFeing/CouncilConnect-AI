@@ -7,6 +7,10 @@ import logging                  # For logging application events and errors
 import app.database             # Custom module for database interactions (Qdrant vector store)
 import google.genai             # GenAI SDK for interacting with Gemma API
 import contextlib               # For handling the lifecycle context manager cleanly
+import pypdf                    # For extracting raw plaintext sequences from uploaded binary files
+import io                       # For managing in-memory byte streams during upload processing
+import scraper.crawler          # Custom module for executing domain crawling tasks
+import scraper.redactor         # Custom module for identifying and scrubbing PII datasets
 
 
 # Configure application logging to print runtime operational signals to the console, which can be captured by Azure Monitor for observability.
@@ -45,8 +49,13 @@ app_instance = fastapi.FastAPI(
     lifespan=lifespan
 )
 
+# Structure validation layout rules for incoming public chat queries
 class QueryRequest(pydantic.BaseModel): # Any object created using class 'QueryRequest' must have a 'prompt' property that is a string and will be passed to BaseModel for validation and structured handling.
     prompt: str
+
+# Structure validation layout rules for tracking crawling requests
+class CrawlRequest(pydantic.BaseModel):
+    url: str
 
 
 async def check_safety(user_query: str) -> bool:  # Input string, return boolean async
@@ -131,11 +140,143 @@ async def chat(request: QueryRequest):  # Define non-blocking background functio
     if not await check_safety(clean_prompt):  # Throw clean_prompt into the safety function for evaluation.
         raise fastapi.HTTPException(status_code=403, detail="Query rejected: This request contains flags violating compliance safety parameters.")
 
-    # Return a high-performance streaming response chunked over HTTP to ensure a minimal Time-to-First-Token footprint for the client interface.
-    return fastapi.responses.StreamingResponse(
-        get_ai_response_stream(clean_prompt),
-        media_type="text/plain"
-    )
+    try:
+        # --- IMPLEMENTING RETRIEVAL-AUGMENTED GENERATION (RAG) CONNECTOR STEP ---
+        # Initialise connection link targeting the vector database infrastructure matching the ingestion repository.
+        vector_manager = app.database.VectorStoreManager(collection_name="council_knowledge")
+        
+        # Execute closeness lookup matching the incoming user query vector profile against indexed assets.
+        matched_points = vector_manager.search_similar(clean_prompt, limit=3)
+        
+        # Construct reference knowledge blocks from database payload text variables.
+        reference_context_blocks = []
+        for point in matched_points:
+            if point.payload and "text" in point.payload:
+                reference_context_blocks.append(f"- Context Source ({point.payload.get('source', 'Unknown')}):\n{point.payload['text']}")
+                
+        compiled_knowledge_context = "\n\n".join(reference_context_blocks)
+        
+        # Build the augmented prompt template forcing constraints onto the model's output generation boundaries.
+        augmented_rag_prompt = (
+            f"You are a helpful customer support assistant for Salford City Council.\n"
+            f"Use ONLY the following verified local council knowledge contexts to formulate your response.\n"
+            f"If the answer cannot be found in the provided contexts, politely explain that the information is missing from the database records.\n"
+            f"Maintain an authoritative, objective, and supportive town hall customer service tone. Do not make references to unrelated entities.\n\n"
+            f"Verified Local Council Knowledge Context:\n"
+            f"{compiled_knowledge_context if compiled_knowledge_context else '[No relevant corporate context discovered in vector store]'}\n\n"
+            f"Resident Query: {clean_prompt}\n"
+            f"Official Response:"
+        )
+        
+        logger.info("Successfully calculated context overlays. Forwarding augmented prompt template out to streaming engine.")
+        
+        # Return a high-performance streaming response chunked over HTTP to ensure a minimal Time-to-First-Token footprint for the client interface.
+        return fastapi.responses.StreamingResponse(
+            get_ai_response_stream(augmented_rag_prompt),
+            media_type="text/plain"
+        )
+        
+    except Exception as rag_routing_error:
+        logger.error(f"Error occurred during RAG pipeline database interception loop: {rag_routing_error}")
+        # Fall back to base generation stream model layer to preserve execution path continuity if the database fails completely.
+        return fastapi.responses.StreamingResponse(
+            get_ai_response_stream(clean_prompt),
+            media_type="text/plain"
+        )
+
+
+@app_instance.post("/ingest")
+async def ingest_policy_document(file: fastapi.UploadFile = fastapi.File(...)):
+    """
+    Administrative endpoint for handling local asset PDF file uploads.
+    Extracts text blocks, executes compliance redactions, and indexes data into the vector space.
+    """
+    logger.info(f"Received administrative document ingestion request for asset file: {file.filename}")
+
+    if not file.filename.lower().endswith('.pdf'):
+        raise fastapi.HTTPException(status_code=400, detail="Ingestion validation error: Only standard PDF documents are supported.")
+
+    try:
+        # Read the raw binary content stream out of the incoming multipart network request wrapper.
+        binary_file_contents = await file.read()
+        
+        # Instantiate an in-memory stream wrapper to parse pages without touching container storage disks.
+        pdf_memory_stream = io.BytesIO(binary_file_contents)
+        pdf_reader = pypdf.PdfReader(pdf_memory_stream)
+        
+        extracted_text_blocks = []
+        for page_index, page_node in enumerate(pdf_reader.pages):
+            page_text = page_node.extract_text()
+            if page_text:
+                extracted_text_blocks.append(page_text)
+                
+        compiled_document_text = " ".join(extracted_text_blocks).strip()
+        
+        if not compiled_document_text:
+            raise fastapi.HTTPException(status_code=422, detail="Parsing failure: The uploaded document contains no valid plaintext characters.")
+            
+        # Route the extracted raw text layer through the operational compliance scrubbing module to clean personal parameters.
+        cleaned_document_text = scraper.redactor.redact_pii(compiled_document_text)
+        
+        # Initialise connection link targeting the persistence vector database layout collection.
+        vector_manager = app.database.VectorStoreManager(collection_name="council_knowledge")
+        
+        # Commit the cleaned document text block into the vector space memory pool.
+        vector_manager.upsert_document(
+            text=cleaned_document_text,
+            metadata={"source": file.filename, "type": "pdf_upload"}
+        )
+        
+        logger.info(f"Successfully processed, scrubbed, and indexed document blocks for resource asset: {file.filename}")
+        return {"status": "success", "detail": f"Document '{file.filename}' successfully integrated into the knowledge base vector pool."}
+
+    except fastapi.HTTPException as active_http_exception:
+        raise active_http_exception
+    except Exception as ingestion_error:
+        logger.error(f"Critical execution error triggered during document pipeline ingestion: {str(ingestion_error)}")
+        raise fastapi.HTTPException(status_code=500, detail=f"Internal database pipeline exception encountered: {str(ingestion_error)}")
+
+
+@app_instance.post("/crawl")
+async def execute_web_crawling_task(request: CrawlRequest):
+    """
+    Administrative endpoint for initiating crawling tasks targeting validated live council web domain nodes.
+    Redacts discovered sensitive fields on the fly prior to running text vector layouts.
+    """
+    target_url_string = request.url.strip()
+    logger.info(f"Received administrative web crawling instruction targeting domain endpoint node: {target_url_string}")
+    
+    if not target_url_string.startswith(("http://", "https://")):
+        raise fastapi.HTTPException(status_code=400, detail="Crawling initialisation blocked: Please specify a completely qualified target URL string starting with http or https.")
+        
+    try:
+        # Instantiate the crawler engine using the targeted base URL address context.
+        spider_engine = scraper.crawler.CouncilCrawler(base_url=target_url_string)
+        
+        # Dispatch the spider to parse structural assets or standard HTML layouts down into plaintext maps.
+        extracted_payload_packet = spider_engine.scrape_content(target_url_string)
+        
+        if not extracted_payload_packet or "text" not in extracted_payload_packet or not extracted_payload_packet["text"].strip():
+            raise fastapi.HTTPException(status_code=422, detail="Crawling aborted: Targeted URL node did not yield indexable plaintext data layouts.")
+            
+        # Clean extracted site characters using the unified PII compliance extraction filter rules.
+        scrubbed_site_text = scraper.redactor.redact_pii(extracted_payload_packet["text"])
+        
+        # Core vector routing interface connectivity.
+        vector_manager = app.database.VectorStoreManager(collection_name="council_knowledge")
+        vector_manager.upsert_document(
+            text=scrubbed_site_text,
+            metadata={"source": target_url_string, "type": "web_spider_crawl"}
+        )
+        
+        logger.info(f"Web crawling operation and vector synchronisation sequence executed cleanly for target address: {target_url_string}")
+        return {"status": "success", "detail": f"Web contents from node reference location '{target_url_string}' successfully parsed, scrubbed, and synchronised."}
+        
+    except fastapi.HTTPException as active_http_exception:
+        raise active_http_exception
+    except Exception as crawler_pipeline_error:
+        logger.error(f"Critical exception intercepted during web spider scraping loop processing: {str(crawler_pipeline_error)}")
+        raise fastapi.HTTPException(status_code=500, detail=f"Internal scraping framework exception encountered: {str(crawler_pipeline_error)}")
 
 
 # Configure CORS to allow frontend communication because the frontend (Streamlit) will be served from a different origin than the FastAPI backend (port 8501 vs 8000).
