@@ -40,7 +40,7 @@ if user_input_prompt := streamlit.chat_input("How can the council assist with an
     # Append the user turn to browser memory cache so it survives the next re-run event.
     streamlit.session_state.conversation_history.append({"role": "user", "content": user_input_prompt})
 
-    # 2. Trigger communication lane to the FastAPI backend container.
+# 2. Trigger communication lane to the FastAPI backend container.
     with streamlit.chat_message("assistant"):
         response_placeholder = streamlit.empty()
         
@@ -51,33 +51,43 @@ if user_input_prompt := streamlit.chat_input("How can the council assist with an
         try:
             logger.info(f"Transmitting operational payload packet to endpoint target: {target_endpoint}")
             
-            # Post the data across the private network bridge container boundary.
-            network_response = requests.post(
+            # Post the data across the private network bridge container boundary, enabling stream tracking.
+            with requests.post(
                 target_endpoint,
                 json=request_payload,
+                stream=True,  # Keeps the data link open to receive token chunks incrementally
                 timeout=30.0  # Safe boundary window for upstream model processing latency.
-            )
-            
-            # Check for gateway perimeter errors or structural validation rejections.
-            if network_response.status_code == 200:
-                extracted_data = network_response.json()
-                final_ai_output = extracted_data.get("response", "Error: Backend payload mapping anomaly encountered.")
+            ) as network_response:
                 
-                # Render the final text string clearly into the presentation interface.
-                response_placeholder.markdown(final_ai_output)
-                
-                # Commit assistant turn to browser memory history cache.
-                streamlit.session_state.conversation_history.append({"role": "assistant", "content": final_ai_output})
-                
-            elif network_response.status_code == 422:
-                error_message = "⚠️ UI Input validation mismatch: Payload structure rejected by backend gateway guard."
-                response_placeholder.markdown(error_message)
-                logger.error("FastAPI perimeter gate rejected frontend data format payload configuration.")
-                
-            else:
-                error_message = f"⚠️ Downstream service exception encountered. System status code: {network_response.status_code}"
-                response_placeholder.markdown(error_message)
-                logger.error(f"Unexpected endpoint transmission barrier state: {network_response.text}")
+                # Check for gateway perimeter errors or structural validation rejections.
+                if network_response.status_code == 200:
+                    final_ai_output = ""
+                    
+                    # Capture each text fragment directly from the incoming network interface as it arrives
+                    for chunk in network_response.iter_content(chunk_size=None, decode_unicode=True):
+                        if chunk:
+                            final_ai_output += chunk
+                            # Update the Streamlit UI immediately to provide near-zero latency text rendering
+                            response_placeholder.markdown(final_ai_output)
+                    
+                    # Commit final accumulated assistant turn to browser memory history cache.
+                    streamlit.session_state.conversation_history.append({"role": "assistant", "content": final_ai_output})
+                    
+                elif network_response.status_code == 403:
+                    # Explicitly handle the backend safety classification firewall response
+                    error_message = "⚠️ Query rejected: This request contains flags violating compliance safety parameters."
+                    response_placeholder.markdown(error_message)
+                    logger.warning("Backend security perimeter rejected the user query prompt contents.")
+                    
+                elif network_response.status_code == 422:
+                    error_message = "⚠️ UI Input validation mismatch: Payload structure rejected by backend gateway guard."
+                    response_placeholder.markdown(error_message)
+                    logger.error("FastAPI perimeter gate rejected frontend data format payload configuration.")
+                    
+                else:
+                    error_message = f"⚠️ Downstream service exception encountered. System status code: {network_response.status_code}"
+                    response_placeholder.markdown(error_message)
+                    logger.error(f"Unexpected endpoint transmission barrier state: {network_response.text}")
                 
         except requests.exceptions.RequestException as network_error:
             fallback_message = "❌ Service communication failure: Unable to establish a connection to the backend engine."

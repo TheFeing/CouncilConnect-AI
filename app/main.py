@@ -1,5 +1,6 @@
 import fastapi                  # API routing and error responses
 import fastapi.middleware.cors  # CORS handling for frontend-backend communication
+import fastapi.responses        # For StreamingResponse delivery optimisation
 import pydantic                 # Data validation and structure
 import uvicorn                  # ASGI server
 import logging                  # For logging application events and errors
@@ -48,7 +49,7 @@ class QueryRequest(pydantic.BaseModel): # Any object created using class 'QueryR
     prompt: str
 
 
-def check_safety(user_query: str) -> bool:  # Input string, return boolean
+async def check_safety(user_query: str) -> bool:  # Input string, return boolean async
     """Evaluates text queries utilising Gemini classification models to ensure policy compliance."""
     if not ai_client:
         logger.error("Gemini execution blocked: Global API client is unassigned. Failing closed for protection.")
@@ -64,8 +65,8 @@ def check_safety(user_query: str) -> bool:  # Input string, return boolean
             f"Query: {user_query}"
         )
         
-        # Send to the safety model.
-        response = ai_client.models.generate_content(
+        # Send to the safety model using the asynchronous .aio client engine to prevent main event loop blockages.
+        response = await ai_client.aio.models.generate_content(
             model='gemini-3.1-flash-lite', # A smaller & cost-effective model designed for classification tasks. See Google for the latest model names and versions.
             contents=safety_prompt
         )
@@ -79,25 +80,30 @@ def check_safety(user_query: str) -> bool:  # Input string, return boolean
         return False    # Fail-closed logic for production safety
 
 
-def get_ai_response(query: str) -> str:
+async def get_ai_response_stream(query: str):
     """
-    Interacts with the Google AI API using the modern google-genai SDK.
+    Interacts with the Google AI API using the modern google-genai SDK async streaming engine.
     """
     if not ai_client:
-        return "System Configuration Error: API Key missing or connection engine unavailable."
+        yield "System Configuration Error: API Key missing or connection engine unavailable."
+        return
 
     try:
-        # Using the unified generate_content method for Gemma 4 31B
-        response = ai_client.models.generate_content(
+        # Utilising the unified asynchronous generate_content_stream method via .aio for Gemma 4 31B
+        response_stream = await ai_client.aio.models.generate_content_stream(
             model='gemma-4-31b-it', # See Google for the latest model names and versions
             contents=query
         )
-        return response.text
+        
+        # Asynchronously yield text fragments directly out to the connection stream as they hit the network buffer interface.
+        async for chunk in response_stream:
+            if chunk.text:
+                yield chunk.text
         
     except Exception as error:
         # Log error for observability
-        logger.error(f"Inference Error: {str(error)}")
-        return "The service is currently unavailable. Please try again later."
+        logger.error(f"Inference Error during asynchronous stream delivery: {str(error)}")
+        yield "The service is currently unavailable. Please try again later."
 
 
 @app_instance.get("/health")    # Create a route (network address) named "/health" for communication with Azure Container App Ingress Gateway, for better request queue management and monitoring.
@@ -121,12 +127,15 @@ async def chat(request: QueryRequest):  # Define non-blocking background functio
     if not clean_prompt:    # Empty string is considered to be False in Python.
         raise fastapi.HTTPException(status_code=400, detail="Query validation error: Input payload cannot be blank.")   # Create and stop further processing with raised exception.
 
-    # Execute the isolated security filter check before routing requests further.
-    if not check_safety(clean_prompt):  # Throw clean_prompt into the safety function for evaluation.
-        return {"response": "Query rejected: This request contains flags violating compliance safety parameters."}
+    # Execute the isolated security filter check before routing requests further using await for non-blocking evaluation.
+    if not await check_safety(clean_prompt):  # Throw clean_prompt into the safety function for evaluation.
+        raise fastapi.HTTPException(status_code=403, detail="Query rejected: This request contains flags violating compliance safety parameters.")
 
-    response_text = get_ai_response(clean_prompt)   # Fetch the final structural evaluation string response from the generation engine.
-    return {"response": response_text}
+    # Return a high-performance streaming response chunked over HTTP to ensure a minimal Time-to-First-Token footprint for the client interface.
+    return fastapi.responses.StreamingResponse(
+        get_ai_response_stream(clean_prompt),
+        media_type="text/plain"
+    )
 
 
 # Configure CORS to allow frontend communication because the frontend (Streamlit) will be served from a different origin than the FastAPI backend (port 8501 vs 8000).
