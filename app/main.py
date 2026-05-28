@@ -17,7 +17,7 @@ ai_client = None
 
 # Define lifespan management using contextlib to initialise the connection once when the server boots up, eliminating recurring Key Vault network requests during conversations.
 @contextlib.asynccontextmanager
-async def lifespan(app: fastapi.FastAPI):
+async def lifespan(fastapi_app: fastapi.FastAPI):
     global ai_client
     logger.info("Initialising global infrastructure components during application startup...")
     
