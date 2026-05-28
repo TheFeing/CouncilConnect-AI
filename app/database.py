@@ -115,7 +115,7 @@ class VectorStoreManager:
                 self.client.create_collection(
                     collection_name=self.collection_name,
                     vectors_config=qdrant_client.models.VectorParams(
-                        size=768, # Vector coordinate length produced by text-embedding-004 model engine
+                        size=3072, # Vector coordinate length produced by the production gemini-embedding-001 engine
                         distance=qdrant_client.models.Distance.COSINE
                     )
                 )
@@ -131,9 +131,9 @@ class VectorStoreManager:
             raise ValueError("generation failed: Global Google GenAI client is unassigned or missing API keys.")
         
         try:
-            # Include the exact 'models/' namespace prefix to clear the v1beta endpoint 404 validation error
+            # Target the production-grade GA model layout to clear v1beta 404 validation errors
             response = self.ai_client.models.embed_content(
-                model="models/text-embedding-004",
+                model="gemini-embedding-001",
                 contents=text_content
             )
             # Extract the coordinate values from the first index of the structured embeddings array
@@ -178,11 +178,15 @@ class VectorStoreManager:
             
         try:
             query_vector = self._get_embedding(query)
-            matched_points = self.client.search(
+            
+            query_response = self.client.query_points(
                 collection_name=self.collection_name,
-                query_vector=query_vector,
+                query=query_vector,
                 limit=limit
             )
+            
+            # Transform extracted response model items to return matches matching expected payload list arrays
+            matched_points = query_response.points
             logger.info(f"Calculated distance metrics. Extracted {len(matched_points)} context documents matching target criteria.")
             return matched_points
         except Exception as search_fault:

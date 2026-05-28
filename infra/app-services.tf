@@ -36,20 +36,20 @@ resource "azurerm_container_app" "app" {
     identity = azurerm_user_assigned_identity.acr_puller.id
   }
 
-  # Maps the secret fetched via the data source into the app configuration
+  # Retaining existing secrets declarations to satisfy the Azure API constraint
   secret {
     name  = "gemma-api-key"
     value = data.azurerm_key_vault_secret.gemma_key.value
   }
 
   secret {
-    name  = "qdrant-api-key"
-    value = data.azurerm_key_vault_secret.qdrant_key.value
+    name  = "qdrant-url"
+    value = data.azurerm_key_vault_secret.qdrant_url.value
   }
 
   secret {
-    name  = "qdrant-url"
-    value = data.azurerm_key_vault_secret.qdrant_url.value
+    name  = "qdrant-api-key"
+    value = data.azurerm_key_vault_secret.qdrant_key.value
   }
 
   # Desired state: Container blueprint
@@ -65,22 +65,20 @@ resource "azurerm_container_app" "app" {
         value = azurerm_key_vault.main.vault_uri
       }
 
-      # Inject the secret alias into the actual environment variable
+      # Inject values directly as explicit deployment string inputs to avoid look-up delays
       env {
-        name        = "GEMMA_API_KEY"
-        secret_name = "gemma-api-key"
+        name  = "GEMMA_API_KEY"
+        value = data.azurerm_key_vault_secret.gemma_key.value
       }
 
-      # Inject the external cluster URL directly into the environment parameters
       env {
-        name        = "QDRANT_URL"
-        secret_name = "qdrant-url"
+        name  = "QDRANT_URL"
+        value = data.azurerm_key_vault_secret.qdrant_url.value
       }
 
-      # Inject the external cloud access token directly into the environment parameters
       env {
-        name        = "QDRANT_API_KEY"
-        secret_name = "qdrant-api-key"
+        name  = "QDRANT_API_KEY"
+        value = data.azurerm_key_vault_secret.qdrant_key.value
       }
 
       env {
