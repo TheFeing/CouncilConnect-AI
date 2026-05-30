@@ -215,7 +215,7 @@ async def execute_crawl(request: CrawlRequest):
         logger.error(f"Crawling pipeline processing halted: {str(crawling_pipeline_error)}")
         raise fastapi.HTTPException(status_code=500, detail=f"Crawling pipeline operation aborted: {str(crawling_pipeline_error)}")
 
-@app_instance.post("/upload-pdf")
+@app_instance.post("/ingest")
 async def ingest_pdf_document(file: fastapi.UploadFile = fastapi.File(...)):
     """Accepts uploaded raw binary PDF structural objects, parses internal texts, redacts sensitive text data strings, and ingests contents."""
     logger.info(f"Received inbound binary upload file target context frame: {file.filename}")
