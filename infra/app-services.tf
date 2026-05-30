@@ -81,6 +81,22 @@ resource "azurerm_container_app" "app" {
         value = data.azurerm_key_vault_secret.qdrant_key.value
       }
 
+      # Dynamic Model Ingestion Configuration Mapping
+      env {
+        name  = "GEMINI_SAFETY_MODEL"
+        value = "gemini-3.1-flash-lite"
+      }
+
+      env {
+        name  = "GEMMA_CHAT_MODEL"
+        value = "gemma-4-31b-it"
+      }
+
+      env {
+        name  = "GEMINI_EMBEDDING_MODEL"
+        value = "gemini-embedding-001"
+      }
+
       env {
         name  = "APPLICATIONINSIGHTS_CONNECTION_STRING"
         value = azurerm_application_insights.app_insights.connection_string

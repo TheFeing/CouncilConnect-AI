@@ -51,6 +51,12 @@ class VectorStoreManager:
     def __init__(self, collection_name: str = "council_knowledge"):
         self.collection_name = collection_name
         
+        # Load the embedding model dynamically from environment variables to prevent version drift.
+        self.embedding_model = os.getenv("GEMINI_EMBEDDING_MODEL")
+        if not self.embedding_model:
+            logger.warning("GEMINI_EMBEDDING_MODEL environment variable missing. Falling back to deployment defaults.")
+            self.embedding_model = "gemini-embedding-001"
+
         # Extract environment components injected via Key Vault blocks
         qdrant_url = os.getenv("QDRANT_URL")
         qdrant_api_key = os.getenv("QDRANT_API_KEY")
@@ -79,10 +85,8 @@ class VectorStoreManager:
                 logger.warning("Missing cloud credentials. Falling back to unauthenticated local engine defaults...")
                 self.client = qdrant_client.QdrantClient(host="localhost", port=6333)
             
-            # Execute structural workspace configuration checks on application boot
-            self._ensure_collection_exists()
         except Exception as connection_error:
-            logger.critical(f"Connection error occurred during structural vector collection validation checks: {connection_error}")
+            logger.critical(f"Connection error occurred during structural vector client initialisation: {connection_error}")
             self.client = None
 
         # Prioritise direct container variable mounts to limit Key Vault network overhead
@@ -102,7 +106,7 @@ class VectorStoreManager:
             logger.warning("VectorStoreManager starting without active Google GenAI embedding generation engine links.")
             self.ai_client = None
 
-    def _ensure_collection_exists(self):
+    def ensure_collection_exists(self):
         """Validates index structures on the target cluster endpoint; constructs them if unallocated."""
         if not self.client:
             return
@@ -131,9 +135,9 @@ class VectorStoreManager:
             raise ValueError("generation failed: Global Google GenAI client is unassigned or missing API keys.")
         
         try:
-            # Target the production-grade GA model layout to clear v1beta 404 validation errors
+            # Target the production-grade dynamic model configuration layout for embedding generation to future-proof against version drift and maintain flexibility.
             response = self.ai_client.models.embed_content(
-                model="gemini-embedding-001",
+                model=self.embedding_model,
                 contents=text_content
             )
             # Extract the coordinate values from the first index of the structured embeddings array
