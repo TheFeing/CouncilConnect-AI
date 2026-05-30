@@ -191,7 +191,11 @@ async def execute_crawl(request: CrawlRequest):
     """Processes background website crawl requests, parsing context blocks, and indexing them down into the database layer."""
     logger.info(f"Received crawling invocation mandate for target context address root: {request.url}")
     try:
-        raw_scraped_pages = scraper.crawler.crawl_domain(request.url, max_pages=15)
+        # Use the CouncilCrawler class directly as defined in scraper.crawler
+        crawler = scraper.crawler.CouncilCrawler(base_url=request.url)
+        # Assuming scrape_content(url) returns a dict mapping URLs to content
+        raw_scraped_pages = crawler.scrape_content(request.url)
+        
         vector_manager = app.database.VectorStoreManager(collection_name="council_knowledge")
         
         processed_count = 0
