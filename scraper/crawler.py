@@ -1,14 +1,16 @@
-import requests                 # Sending HTTP requests to websites
-import bs4                      # Parsing and extracting data from HTML (BeautifulSoup)
-import urllib.parse             # Handling and breaking down URLs
-import time                     # Delays between requests
-import random                   # Generating random delays (human-like behavior)
-import logging                  # Logging activity and errors
-import io                       # Handling input/output operations for handling in-memory binary streams
-import pypdf                    # Extracting text from PDF documents
-import docx                     # Extracts text from OpenXML Word documents
-import openpyxl                 # Extracts text from Excel spreadsheets
-import urllib.robotparser       # Built-in engine to read and evaluate robots.txt protocols
+import os                               # Accessing system environment parameters natively
+import re                               # String cleaning via regex matching patterns
+import httpx                            # Advanced HTTP transport engine supporting HTTP/2 sockets
+import bs4                              # Parsing and extracting data from HTML (BeautifulSoup)
+import time                             # Delays between requests
+import random                           # Generating random delays (human-like behavior)
+import logging                          # Logging activity and errors
+import io                               # Handling input/output operations for handling in-memory binary streams
+import pypdf                            # Extracting text from PDF documents
+import docx                             # Extracts text from OpenXML Word documents
+import openpyxl                         # Extracts text from Excel spreadsheets
+import urllib.parse                     # Handling and breaking down URLs
+import urllib.robotparser               # Built-in engine to read and evaluate robots.txt protocols
 
 # Configure operational logging infrastructure for the crawler subsystem.
 logging.basicConfig(level=logging.INFO)
@@ -24,15 +26,28 @@ class CouncilCrawler:
     # --- SECTION 1: SETUP ---
     
     def __init__(self, base_url):   # Auto-called and attached to the instance (self) by Python when creating a new instance.
-        self.base_url = base_url        # Starting point for crawling.
-        self.visited_urls = set()       # Stores seen URLs. A 'set' ensures no duplicates.
+        self.base_url = base_url    # Starting point for crawling.
+        self.visited_urls = set()   # Stores seen URLs. A 'set' ensures no duplicates.
+        
+        # Comprehensive headers configured to pass both modern browser tokens and transparency metadata.
         self.headers = {
             # Mimics a real Chrome browser for better compatibility and to reduce the chance of being blocked (S10) with custom identity tracking.
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.110 Safari/537.36 (Project-Apprenticeship-Fei; Refactoring-Scraper-Subsystem)',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.110 Safari/537.36 (Project-Apprenticeship-Fei)',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
             'Accept-Language': 'en-GB,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
             # Transparency contact payload for ethical crawling verification.
             'From': 'Project-Apprenticeship-Fei'
         }
+
+        # Initialise the request client utilising HTTP/2 frame construction to bypass restrictive firewalls natively.
+        self.client = httpx.Client(
+            headers=self.headers,
+            follow_redirects=True,
+            timeout=20.0,
+            http2=True # Enforces advanced HTTP/2 frame construction to bypass potential WAF drops
+        )
 
         # Initialise the robots.txt validation engine
         self.robot_parser = urllib.robotparser.RobotFileParser()
@@ -43,7 +58,11 @@ class CouncilCrawler:
 
         try:
             logger.info(f"Fetching operational crawling policies from: {robots_url}")
-            self.robot_parser.read()
+            # Fetch the robots mapping using the configured HTTP/2 client to ensure the request is not dropped with a 403 error
+            robots_response = self.client.get(robots_url)
+            
+            # Feed the raw lines directly to the compliance file parser engine
+            self.robot_parser.parse(robots_response.text.splitlines())
         except Exception as robot_error:
             # If a site lacks a robots.txt entirely, it returns a 404 error, which implies open crawling is acceptable
             logger.warning(f"Could not read robots.txt file at {robots_url}: {str(robot_error)}. Defaulting to permissive stance.")
@@ -58,8 +77,8 @@ class CouncilCrawler:
         logger.info(f"Crawling operational target node: {url}")
 
         try:
-            # Transmit the network query with configured browser headers.
-            response = requests.get(url, headers=self.headers, timeout=10) # Fetch web content.
+            # Transmit the network query with configured browser headers via HTTP/2 client wrapper.
+            response = self.client.get(url) # Fetch web content.
             logger.info(f"HTTP response resolution for {url}: status code {response.status_code}")
             self.visited_urls.add(url) # Mark URL as visited.
             
@@ -102,9 +121,13 @@ class CouncilCrawler:
                 script.extract()   
 
             extracted_text = content_area.get_text(separator=' ', strip=True) # Extracts clean text with normalised space boundaries.
-            return {"type": "html", "url": url, "text": extracted_text}
             
-        except requests.RequestException as network_exception:
+            # Condense variable multi-line gaps into sanitised character spacing to ensure high data hygiene before vector store sync.
+            cleaned_text = re.sub(r'\s+', ' ', extracted_text).strip()
+            
+            return {"type": "html", "url": url, "text": cleaned_text}
+            
+        except Exception as network_exception:
             logger.error(f"Network error encountered while fetching destination {url}: {str(network_exception)}")
             return None # Error encountered, return nothing for this URL
 
