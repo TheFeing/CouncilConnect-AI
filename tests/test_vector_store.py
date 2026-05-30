@@ -6,6 +6,9 @@ def test_vector_storage_and_retrieval():
     Rationale: Integration test to ensure DB connectivity, schema validity and 80% coverage of vector_store.py.
     """
     manager = app.database.VectorStoreManager(collection_name="test_collection")
+    
+    manager.ensure_collection_exists()
+    
     sample_text = "Salford residents can pay council tax online."
     
     # Inserts then looks up the same text
