@@ -69,37 +69,69 @@ class CouncilCrawler:
 
     # --- SECTION 2: PUBLIC ENGINE HUB ---
 
+    def _resolve_github_url(self, url):
+        """
+        Translates a standard GitHub web interface blob URL into a direct raw content transmission path.
+        This technique bypasses modern single-page-app dynamic elements by performing string translation.
+        """
+        if "github.com" in url and "/blob/" in url:
+            logger.info(f"GitHub repository UI wrapper interface detected for: {url}")
+            
+            # Perform a structural URL modification to route to the content delivery endpoint
+            raw_url = url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
+            logger.info(f"Deterministic translation mapping resolved raw resource asset target: {raw_url}")
+            
+            # Fetch and return the binary payload stream response
+            return self.client.get(raw_url)
+            
+        # For non-GitHub sources, fetch the address normally
+        return self.client.get(url)
+
     def scrape_content(self, url):
-        if url in self.visited_urls or not self.is_polite(url): # Ensures URL is not visited and allowed.
+        if url in self.visited_urls or not self.is_polite(url):
             return None
         
-        time.sleep(random.uniform(2.0, 5.0)) # Avoid triggering rate limiters (2-5 seconds delay).
+        time.sleep(random.uniform(2.0, 5.0))
         logger.info(f"Crawling operational target node: {url}")
 
         try:
-            # Transmit the network query with configured browser headers via HTTP/2 client wrapper.
-            response = self.client.get(url) # Fetch web content.
-            logger.info(f"HTTP response resolution for {url}: status code {response.status_code}")
-            self.visited_urls.add(url) # Mark URL as visited.
+            # Resolve the request pipeline context, mutating candidate GitHub UI URLs safely to raw binary streams
+            response = self._resolve_github_url(url)
+            logger.info(f"HTTP response resolution completed: status code {response.status_code}")
+            
+            self.visited_urls.add(url)
             
             if response.status_code != 200:
                 logger.warning(f"Unsuccessful HTTP resolution code encountered for {url}. Skipping source.")
-                return None # Skip to next URL if not successful.
+                return None
 
-            # Transient In-Memory Document Processing Route.
             lower_url = url.lower()
-            if lower_url.endswith(('.pdf', '.doc', '.docx', '.xls', '.xlsx')):
+            
+            # Identify if this is a known document type
+            is_doc = lower_url.endswith(('.pdf', '.doc', '.docx', '.xls', '.xlsx'))
+            
+            # Check the content-type header as a fallback configuration
+            content_type = response.headers.get("Content-Type", "").lower()
+            if "application/pdf" in content_type:
+                is_doc = True
+
+            if is_doc:
                 logger.info(f"Target URL verified as asset format: {url}. Processing file stream entirely in RAM.")
                 
+                # Check byte stream header markers to ensure HTML error layout wrapper data is not parsed
+                if response.content.startswith(b'\n') or response.content.startswith(b'<!doctype'):
+                    logger.error(f"Stream verification error for {url}: Received HTML content template instead of binary data stream.")
+                    return None
+                
                 document_text = None
-                if lower_url.endswith('.pdf'):
+                if lower_url.endswith('.pdf') or "application/pdf" in content_type:
                     document_text = self._parse_in_memory_pdf(response.content, url)
                 elif lower_url.endswith('.docx'):
                     document_text = self._parse_in_memory_docx(response.content, url)
                 elif lower_url.endswith('.xlsx'):
                     document_text = self._parse_in_memory_xlsx(response.content, url)
                 elif lower_url.endswith(('.doc', '.xls')):
-                    logger.warning(f"Legacy binary format detected ({url}). Content extraction requires host binaries. Returning metadata only.")
+                    logger.warning(f"Legacy binary format detected ({url}). Returning metadata only.")
                     return {"type": "document", "url": url, "text": f"Legacy document format metadata placeholder for {url}"}
 
                 if document_text:
@@ -107,29 +139,27 @@ class CouncilCrawler:
                 return None
 
             # --- STANDARD HTML PROCESSING ---
-            soup = bs4.BeautifulSoup(response.text, 'html.parser') # Turns HTML into a searchable DOM tree structure.
+            # Only reach here if it is NOT a document
+            soup = bs4.BeautifulSoup(response.text, 'html.parser') 
 
             # Identify the main content container to avoid sidebar/nav noise
-            # Some sites often use <main> or specific article tags
             content_area = soup.find('main') or soup.find('article') or soup.body
 
             if not content_area:
                 logger.info(f"Target URL may not contain a distinct content container block. Skipping extraction for: {url}")
                 return None
 
-            for script in content_area(["script", "style", "nav", "footer", "header"]): # Remove non-content tags.
+            for script in content_area(["script", "style", "nav", "footer", "header"]):
                 script.extract()   
 
-            extracted_text = content_area.get_text(separator=' ', strip=True) # Extracts clean text with normalised space boundaries.
-            
-            # Condense variable multi-line gaps into sanitised character spacing to ensure high data hygiene before vector store sync.
+            extracted_text = content_area.get_text(separator=' ', strip=True)
             cleaned_text = re.sub(r'\s+', ' ', extracted_text).strip()
             
             return {"type": "html", "url": url, "text": cleaned_text}
             
         except Exception as network_exception:
             logger.error(f"Network error encountered while fetching destination {url}: {str(network_exception)}")
-            return None # Error encountered, return nothing for this URL
+            return None
 
     # --- SECTION 3: HTML PROCESSING UTILITIES ---
 
