@@ -82,18 +82,26 @@ def test_ask_endpoint_exception_handling(mock_genai_client_class):
     assert response.status_code == 200
     assert "rejected" in response.json()["response"]
 
-def test_ask_endpoint_empty_prompt():
+def test_chat_empty_prompt_validation():
     """
-    Rationale: Hits the FastAPI HTTPException 400 block for blank inputs.
+    Rationale: Ensures that the input validation layer correctly catches empty payloads
+    and responds with a 400 Bad Request error.
     """
-    response = client.post("/chat", json={"prompt": "   "})
-    assert response.status_code == 400
-    assert "cannot be blank" in response.json()["detail"]
+    with fastapi.testclient.TestClient(app.main.app_instance) as client:
+        # Send an invalid payload containing whitespace padding strings
+        response = client.post("/chat", json={"prompt": "   "})
+        
+        assert response.status_code == 400
+        assert "Query validation error" in response.json()["detail"]
 
-def test_health_check_endpoint():
+def test_health_endpoint():
     """
-    Rationale: Verifies basic connectivity to the API root.
+    Rationale: Verifies that the public health probe is active and returns the 
+    correct version string under the active ASGI runtime context.
     """
-    response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json()["status"] == "healthy"
+    # Utilise the context manager structure to force execution of the global lifespan setup block before sending mock HTTP requests.
+    with fastapi.testclient.TestClient(app.main.app_instance) as client:
+        response = client.get("/health")
+        
+        assert response.status_code == 200
+        assert response.json() == {"status": "healthy", "version": "1.1.0"}
