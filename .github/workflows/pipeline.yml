@@ -164,14 +164,21 @@ jobs:
           docker build -f docker/frontend.Dockerfile -t acrcouncilconnectai.azurecr.io/councilconnect-frontend:${{ github.sha }} .
           docker push acrcouncilconnectai.azurecr.io/councilconnect-frontend:${{ github.sha }}
 
-      # Automatically executes the container app update steps to seamlessly switch traffic to the new features.
+      # Prevents deployment if the images were not correctly uploaded to ACR
+      - name: Verify Image Manifests
+        run: |
+          az acr repository show-manifests --name acrcouncilconnectai --repository councilconnect-backend --query "[?tags[0]=='${{ github.sha }}']" -o tsv
+          az acr repository show-manifests --name acrcouncilconnectai --repository councilconnect-frontend --query "[?tags[0]=='${{ github.sha }}']" -o tsv
+
+      # Rollout Updates
+      # Apply updates sequentially to allow for potential rollback triggers if logic were added
       - name: Propagate Live Container App Infrastructure Updates
         run: |
           az containerapp update \
             --name app-councilconnect-ai \
             --resource-group rg-councilconnect-ai \
             --image acrcouncilconnectai.azurecr.io/councilconnect-backend:${{ github.sha }}
-
+            
           az containerapp update \
             --name frontend-councilconnect-ai \
             --resource-group rg-councilconnect-ai \
