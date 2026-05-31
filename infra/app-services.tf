@@ -104,7 +104,7 @@ resource "azurerm_container_app" "app" {
     }
 
     # KEDA Scaling: Logic to manage replicas based on traffic
-    min_replicas = 0  # Scale-to-Zero: Cost is £0 when not in use
+    min_replicas = 0 # Scale-to-Zero: Cost is £0 when not in use
     max_replicas = 10
 
     http_scale_rule {

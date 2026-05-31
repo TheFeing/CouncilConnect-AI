@@ -19,7 +19,7 @@ resource "azurerm_resource_provider_registration" "alerts_management" {
 resource "azurerm_consumption_budget_resource_group" "safety_budget" {
   name              = "budget-${var.project_name}"
   resource_group_id = azurerm_resource_group.rg.id
-  amount            = 10  # Monthly limit in GBP
+  amount            = 10 # Monthly limit in GBP
   time_grain        = "Monthly"
   time_period {
     start_date = "${formatdate("YYYY-MM-01", timestamp())}T00:00:00Z" # Must be the first of a month
