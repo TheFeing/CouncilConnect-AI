@@ -1,32 +1,70 @@
-import pytest
-# MagicMock (unittest.mock) can create sub-objects on the fly (yes to everything), without needing the actual library
-# patch (unittest.mock) replaces the Client class in the guardrails module with MagicMock
-import unittest.mock
-import scraper.ingest
+"""
+Tests for the scraper.ingest pipeline (run_ingestion_pipeline).
+"""
 
-# The @patch decorator acts as a wrapper in the ingest module to replace both the CouncilCrawler1 class and the redact_pii function, preventing real web scraping and controlling function output.
-@unittest.mock.patch('scraper.crawler.CouncilCrawler')
-@unittest.mock.patch('scraper.redactor.redact_pii')
-def test_run_ingestion_pipeline_success(mock_redactor, mock_crawler_class):
-    """
-    Rationale: Verifies text extraction and redaction coordination pipelines handle scraped parameters cleanly.
-    """
-    
-    mock_crawler = unittest.mock.MagicMock()
-    mock_crawler_class.return_value = mock_crawler
-    
-    # Return the dictionary format expected by the ingestion orchestration workflow
-    mock_crawler.scrape_content.return_value = {
-        "type": "html",
-        "url": "https://example.com/test",
-        "text": "Original content with email@test.com"
-    }
+import os               # Accesses environment variables for test configuration
+import unittest.mock    # Provides tools for mocking and patching dependencies during tests
+import scraper.ingest   # Module under test containing the run_ingestion_pipeline function and related logic
 
-    mock_redactor.return_value = "Original content with [EMAIL_REDACTED]"
 
-    # Tests pipeline execution with a sample URL
-    scraper.ingest.run_ingestion_pipeline("https://example.com/test")
+@unittest.mock.patch("scraper.ingest.app.database.VectorStoreManager")
+@unittest.mock.patch("scraper.ingest.scraper.redactor.redact_pii")
+@unittest.mock.patch("scraper.ingest.scraper.crawler.CouncilCrawler")
+def test_run_ingestion_pipeline_success(mock_crawler_class, mock_redact, mock_vsm_class, tmp_path, monkeypatch):
+    # Point backup path to a temp directory so no real disk writes occur
+    monkeypatch.setattr(
+        "scraper.ingest.os.path.dirname",
+        lambda _: str(tmp_path)
+    )
 
-    # Ensures the mock is called once with specific string
-    mock_crawler.scrape_content.assert_called_once_with("https://example.com/test")
-    mock_redactor.assert_called_once_with("Original content with email@test.com")
+    crawler_inst = unittest.mock.MagicMock()
+    crawler_inst.scrape_content.return_value = {"text": "Council tax information here."}
+    mock_crawler_class.return_value = crawler_inst
+
+    mock_redact.return_value = "Council tax information here."
+
+    vsm_inst = unittest.mock.MagicMock()
+    mock_vsm_class.return_value = vsm_inst
+
+    scraper.ingest.run_ingestion_pipeline("[salford.gov.uk](https://www.salford.gov.uk/council-tax/)")
+
+    mock_redact.assert_called_once_with("Council tax information here.")
+    vsm_inst.upsert_document.assert_called_once()
+
+
+@unittest.mock.patch("scraper.ingest.app.database.VectorStoreManager")
+@unittest.mock.patch("scraper.ingest.scraper.redactor.redact_pii")
+@unittest.mock.patch("scraper.ingest.scraper.crawler.CouncilCrawler")
+def test_run_ingestion_pipeline_no_text(mock_crawler_class, mock_redact, mock_vsm_class):
+    crawler_inst = unittest.mock.MagicMock()
+    crawler_inst.scrape_content.return_value = None  # Crawler found nothing
+    mock_crawler_class.return_value = crawler_inst
+
+    vsm_inst = unittest.mock.MagicMock()
+    mock_vsm_class.return_value = vsm_inst
+
+    # Should log an error but not raise
+    scraper.ingest.run_ingestion_pipeline("[salford.gov.uk](https://www.salford.gov.uk/council-tax/)")
+
+    mock_redact.assert_not_called()
+    vsm_inst.upsert_document.assert_not_called()
+
+
+@unittest.mock.patch("scraper.ingest.app.database.VectorStoreManager")
+@unittest.mock.patch("scraper.ingest.scraper.redactor.redact_pii")
+@unittest.mock.patch("scraper.ingest.scraper.crawler.CouncilCrawler")
+def test_run_ingestion_pipeline_db_error_logged(mock_crawler_class, mock_redact, mock_vsm_class, tmp_path, monkeypatch):
+    monkeypatch.setattr("scraper.ingest.os.path.dirname", lambda _: str(tmp_path))
+
+    crawler_inst = unittest.mock.MagicMock()
+    crawler_inst.scrape_content.return_value = {"text": "Some content."}
+    mock_crawler_class.return_value = crawler_inst
+
+    mock_redact.return_value = "Some content."
+
+    vsm_inst = unittest.mock.MagicMock()
+    vsm_inst.upsert_document.side_effect = Exception("DB write failure")
+    mock_vsm_class.return_value = vsm_inst
+
+    # Should not raise despite DB failure
+    scraper.ingest.run_ingestion_pipeline("[salford.gov.uk](https://www.salford.gov.uk/council-tax/)")

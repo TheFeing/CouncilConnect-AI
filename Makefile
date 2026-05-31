@@ -19,7 +19,7 @@ build-docker-frontend:
 # "--cov=app" measures code execution coverage for modules contained exclusively inside the app package.
 # "--cov-report=term-missing" appends a "Missing" column to the workspace free of dead cache files.
 test:
-	python -m pytest tests/ --cov=app --cov-report=term-missing --cov-fail-under=80
+	python -m pytest tests/ --cov=app --cov=scraper --cov-report=term-missing --cov-fail-under=80
 	rm -f knowledge_base/processed/*.json
 
 # lint: Scans the codebase for styling anomalies, formatting errors, or structural anti-patterns using Flake8.

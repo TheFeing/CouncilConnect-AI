@@ -11,6 +11,7 @@ pytest                  # The testing engine
 pytest-cov              # Measures test coverage
 pytest-mock             # Mocks external dependencies in tests
 python-docx             # Parses unstructured text content from Microsoft Word assets
+python-multipart        # Processes multipart form submissions for binary data ingestion files
 qdrant-client           # Vector database connection
 requests                # HTTP requests for scraping
 streamlit               # Frontend UI framework
