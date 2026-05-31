@@ -180,6 +180,6 @@ jobs:
             --image acrcouncilconnectai.azurecr.io/councilconnect-backend:${{ github.sha }}
             
           az containerapp update \
-            --name frontend-councilconnect-ai \
+            --name ui-councilconnect-ai \
             --resource-group rg-councilconnect-ai \
             --image acrcouncilconnectai.azurecr.io/councilconnect-frontend:${{ github.sha }}
