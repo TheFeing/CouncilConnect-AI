@@ -5,10 +5,10 @@
 .netrc
 
 # --- Terraform & Infrastructure ---
-.terraform/
-.terraform.lock.hcl
+**/.terraform/*
 *.tfstate
-*.tfstate.backup
+*.tfstate.*
+.terraform.lock.hcl
 
 # --- Python Environment & Dependencies ---
 venv/
@@ -59,3 +59,6 @@ knowledge_base/processed/*.json
 Thumbs.db
 desktop.ini
 $RECYCLE.BIN/
+
+# --- Admin Operations ---
+adminOps/

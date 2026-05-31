@@ -1,14 +1,18 @@
-fastapi                 # The web server framework
-uvicorn                 # Runs the web server
-pytest                  # The testing engine
-pytest-cov              # Measures test coverage
-pytest-mock	            # Mocks external dependencies in tests
-flake8                  # The code style checker
-google-genai	        # Modern Gemma 3 API connection
-qdrant-client           # Vector database connection
-beautifulsoup4          # HTML parsing for the crawler
-requests                # HTTP requests for scraping
 azure-identity          # Authenticates via Managed Identity or CLI
 azure-keyvault-secrets  # Fetches Gemma and Qdrant keys from the Vault
+beautifulsoup4          # HTML parsing for the crawler
+fastapi                 # The web server framework
+flake8                  # The code style checker
+google-genai            # Modern Gemma 3 API connection
 locust                  # User traffic simulation
+openpyxl                # Processes spreadsheet tabular metrics directly from Excel files
+pypdf                   # Extracts structural text data from PDF documents
+pytest                  # The testing engine
+pytest-cov              # Measures test coverage
+pytest-mock             # Mocks external dependencies in tests
+python-docx             # Parses unstructured text content from Microsoft Word assets
+python-multipart        # Processes multipart form submissions for binary data ingestion files
+qdrant-client           # Vector database connection
+requests                # HTTP requests for scraping
 streamlit               # Frontend UI framework
+uvicorn                 # Runs the web server

@@ -1,0 +1,185 @@
+# GitHub Actions auto-reads YAML config files in .github/workflows/ directory of a repo.
+name: Core CI-CD Automation Pipeline
+
+on:
+  # Triggered only in these scenarios and changes to these paths.
+  push:
+    branches: [ main ]
+    paths: [ 'infra/**', 'app/**', 'frontend/**', 'scraper/**', 'tests/**', 'docker/**', 'requirements.txt' ]
+  pull_request:
+    branches: [ main ]
+    paths: [ 'infra/**', 'app/**', 'frontend/**', 'scraper/**', 'tests/**', 'docker/**', 'requirements.txt' ]
+
+concurrency:
+  group: deployment-${{ github.ref }} # Group concurrent runs (github.ref is branch or PR identifier) to prevent multiple Terraform runs on same branch/PR.
+  cancel-in-progress: false # Prevents stalled runs from being cancelled.
+
+permissions:
+  contents: read  # Allows runner to download codes from the repository to build the Dockerfile, but not modify any code.
+  pull-requests: write  # Allows GitHub Actions to post comments on PRs (e.g., Terraform plan output) and update PR status.
+
+env:
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  TF_VAR_gemma_api_key: ${{ secrets.GEMMA_API_KEY }}
+
+jobs:
+  # =========================================================================
+  # STAGE 1: CONTINUOUS INTEGRATION (QUALITY ASSURANCE & TESTING)
+  # =========================================================================
+  quality-check:
+    name: quality-check (${{ matrix.python-version }})
+    runs-on: ubuntu-latest # Ephemeral GitHub-hosted runner (containerised VM).
+    strategy:
+      fail-fast: true # Stops all matrix runs immediately if any single version fails.
+      matrix:
+        python-version: ['3.11', '3.14']  # Tests against these common Python versions to ensure compatibility and catch version-specific issues early.
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip' # Reduces build time by caching downloaded libraries.
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+
+      - name: Run Linting
+        run: |
+          make lint # Uses the Makefile to maintain standardisation.
+
+      - name: Run Tests
+        run: |
+          # Use the python module runner to ensure paths are respected
+          python -m pytest tests/ --cov=app --cov=scraper --cov-report=term-missing --cov-fail-under=80
+
+      - name: Upload Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: html-coverage-report-py${{ matrix.python-version }}
+          path: htmlcov/
+        if: always() # Ensures test results are recorded even if previous testing checks failed.
+
+  # =========================================================================
+  # STAGE 2: INFRASTRUCTURE MANAGEMENT (TERRAFORM AUTOMATION)
+  # =========================================================================
+  terraform:
+    name: 'Terraform Automation'
+    runs-on: ubuntu-latest  # Ephemeral GitHub-hosted runner (containerised VM).
+    needs: quality-check # Strict Gateway: Python quality tests must pass before infra changes can be evaluated.
+    
+    defaults:
+      run:
+        working-directory: ./infra  # All commands run in infra/ directory.
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      - name: Terraform Format Check
+        run: terraform fmt -check
+
+      - name: Terraform Init
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.BACKEND_RG }}" \
+            -backend-config="storage_account_name=${{ secrets.BACKEND_SA }}" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=terraform.tfstate"
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      # Reconciles (claims) existing manual role assignments with remote state storage (e.g., prevent 409 errors in terraform).
+      - name: Reconcile Drift and Existing Access Roles
+        run: |
+          echo "Inspecting state tracking tables for existing roles..."
+          if ! terraform state show azurerm_role_assignment.admin_access > /dev/null 2>&1; then
+            echo "Admin role assignment missing from state. Attempting automated import..."
+            terraform import azurerm_role_assignment.admin_access /subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/rg-councilconnect-ai/providers/Microsoft.KeyVault/vaults/kv-councilconnect-ai/providers/Microsoft.Authorization/roleAssignments/61905fb69d614434bbafd71348102b81 || true
+          fi
+          if ! terraform state show azurerm_role_assignment.sp_vault_access > /dev/null 2>&1; then
+            echo "Pipeline role assignment missing from state. Attempting automated import..."
+            terraform import azurerm_role_assignment.sp_vault_access /subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/rg-councilconnect-ai/providers/Microsoft.KeyVault/vaults/kv-councilconnect-ai/providers/Microsoft.Authorization/roleAssignments/f4701a18102649a3a258e96d0dbdd9fd || true
+          fi
+
+      # Comparison: State file (gets current infra state) and compares against .tf files.
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color -out=tfplan
+
+      - name: Terraform Apply
+        # Apply changes only for main branch merge (push).
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: terraform apply -auto-approve tfplan
+
+  # =========================================================================
+  # STAGE 3: APPLICATION RELEASES & LIVE APP CONTAINER UPDATES
+  # =========================================================================
+  application-deployment:
+    name: Build, Push & Rollout Application Images
+    runs-on: ubuntu-latest
+    needs: terraform # Infrastructure changes must be completed before new app builds run.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' # Runs exclusively on pushes to main branch.
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      # Logs into Azure using the Service Principal credentials stored in the repository secrets.
+      - name: Authenticate to Azure CLI
+        uses: azure/login@v2
+        with:
+          creds: '{"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}"}'
+
+      # Authenticates the pipeline agent to push images to the specific Azure Container Registry instance.
+      - name: Authenticate to Private Registry (ACR)
+        run: |
+          az acr login --name acrcouncilconnectai
+
+      - name: Build and Push Core AI Backend Engine Image
+        run: |
+          docker build -f docker/backend.Dockerfile -t acrcouncilconnectai.azurecr.io/councilconnect-backend:${{ github.sha }} .
+          docker push acrcouncilconnectai.azurecr.io/councilconnect-backend:${{ github.sha }}
+
+      - name: Build and Push Resident Frontend Interface Image
+        run: |
+          docker build -f docker/frontend.Dockerfile -t acrcouncilconnectai.azurecr.io/councilconnect-frontend:${{ github.sha }} .
+          docker push acrcouncilconnectai.azurecr.io/councilconnect-frontend:${{ github.sha }}
+
+      # Prevents deployment if the images were not correctly uploaded to ACR
+      - name: Verify Image Manifests
+        run: |
+          az acr repository show-manifests --name acrcouncilconnectai --repository councilconnect-backend --query "[?tags[0]=='${{ github.sha }}']" -o tsv
+          az acr repository show-manifests --name acrcouncilconnectai --repository councilconnect-frontend --query "[?tags[0]=='${{ github.sha }}']" -o tsv
+
+      # Rollout Updates
+      # Apply updates sequentially to allow for potential rollback triggers if logic were added
+      - name: Propagate Live Container App Infrastructure Updates
+        run: |
+          az containerapp update \
+            --name app-councilconnect-ai \
+            --resource-group rg-councilconnect-ai \
+            --image acrcouncilconnectai.azurecr.io/councilconnect-backend:${{ github.sha }}
+            
+          az containerapp update \
+            --name frontend-councilconnect-ai \
+            --resource-group rg-councilconnect-ai \
+            --image acrcouncilconnectai.azurecr.io/councilconnect-frontend:${{ github.sha }}
