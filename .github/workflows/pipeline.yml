@@ -5,10 +5,28 @@ on:
   # Triggered only in these scenarios and changes to these paths.
   push:
     branches: [ main ]
-    paths: [ 'infra/**', 'app/**', 'frontend/**', 'scraper/**', 'tests/**', 'docker/**', 'requirements.txt' ]
+    paths: 
+      - 'infra/**'
+      - 'app/**'
+      - 'frontend/**'
+      - 'scraper/**'
+      - 'tests/**'
+      - 'docker/**'
+      - 'requirements.txt'
+      - 'Makefile'
+      - '.github/workflows/**'
   pull_request:
     branches: [ main ]
-    paths: [ 'infra/**', 'app/**', 'frontend/**', 'scraper/**', 'tests/**', 'docker/**', 'requirements.txt' ]
+    paths: 
+      - 'infra/**'
+      - 'app/**'
+      - 'frontend/**'
+      - 'scraper/**'
+      - 'tests/**'
+      - 'docker/**'
+      - 'requirements.txt'
+      - 'Makefile'
+      - '.github/workflows/**'
 
 concurrency:
   group: deployment-${{ github.ref }} # Group concurrent runs (github.ref is branch or PR identifier) to prevent multiple Terraform runs on same branch/PR.
@@ -171,7 +189,6 @@ jobs:
           az acr repository show-manifests --name acrcouncilconnectai --repository councilconnect-frontend --query "[?tags[0]=='${{ github.sha }}']" -o tsv
 
       # Rollout Updates
-      # Apply updates sequentially to allow for potential rollback triggers if logic were added
       - name: Propagate Live Container App Infrastructure Updates
         run: |
           az containerapp update \
@@ -180,6 +197,6 @@ jobs:
             --image acrcouncilconnectai.azurecr.io/councilconnect-backend:${{ github.sha }}
             
           az containerapp update \
-            --name frontend-councilconnect-ai \
+            --name ui-councilconnect-ai \
             --resource-group rg-councilconnect-ai \
             --image acrcouncilconnectai.azurecr.io/councilconnect-frontend:${{ github.sha }}
