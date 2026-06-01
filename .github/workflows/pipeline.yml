@@ -2,10 +2,10 @@
 name: Core CI-CD Automation Pipeline
 
 on:
-  # Triggered only in these scenarios and changes to these paths.
+  # Triggered only in these scenarios.
   push:
     branches: [ main ]
-    paths: 
+    paths:  # Changes to these files/directories trigger the pipeline.
       - 'infra/**'
       - 'app/**'
       - 'frontend/**'
@@ -17,7 +17,7 @@ on:
       - '.github/workflows/**'
   pull_request:
     branches: [ main ]
-    paths: 
+    paths:  # Changes to these files/directories trigger the pipeline.
       - 'infra/**'
       - 'app/**'
       - 'frontend/**'
@@ -27,6 +27,8 @@ on:
       - 'requirements.txt'
       - 'Makefile'
       - '.github/workflows/**'
+  schedule: # Scheduled runs for routine maintenance and non-event-driven tasks (e.g., rebuild and redeploy containers).
+    - cron: '0 1 * * 0' # Run every Sunday at 1:00 AM UTC.
 
 concurrency:
   group: deployment-${{ github.ref }} # Group concurrent runs (github.ref is branch or PR identifier) to prevent multiple Terraform runs on same branch/PR.
@@ -165,7 +167,7 @@ jobs:
     name: Build, Push & Rollout Application Images
     runs-on: ubuntu-latest
     needs: terraform # Infrastructure changes must be completed before new app builds run.
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' # Runs exclusively on pushes to main branch.
+    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'schedule' # Runs on pushes to main branch or scheduled runs.
 
     steps:
       - name: Checkout Source Code
