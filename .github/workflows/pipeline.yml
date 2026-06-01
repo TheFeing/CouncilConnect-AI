@@ -83,10 +83,20 @@ jobs:
           # Use the python module runner to ensure paths are respected
           python -m pytest tests/ --cov=app --cov=scraper --cov-report=term-missing --cov-fail-under=80
 
+      - name: Scan dependencies for vulnerabilities
+        run: |
+          pip install pip-audit
+          pip-audit --requirement requirements.txt
+
+      - name: Run bandit security linter
+        run: |
+          pip install bandit
+          bandit -r app/ scraper/ -ll -ii   # -ll only shows high severity issues, -ii only shows high confidence issues.
+
       - name: Upload Coverage Report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4  # Uploads the HTML coverage report as an artifact to GitHub for later retrieval and analysis.
         with:
-          name: html-coverage-report-py${{ matrix.python-version }}
+          name: html-coverage-report-py${{ matrix.python-version }}   # Unique name for each Python version's report to prevent overwriting.
           path: htmlcov/
         if: always() # Ensures test results are recorded even if previous testing checks failed.
 
