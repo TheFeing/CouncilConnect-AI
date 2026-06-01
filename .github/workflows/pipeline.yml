@@ -171,7 +171,6 @@ jobs:
           az acr repository show-manifests --name acrcouncilconnectai --repository councilconnect-frontend --query "[?tags[0]=='${{ github.sha }}']" -o tsv
 
       # Rollout Updates
-      # Apply updates sequentially to allow for potential rollback triggers if logic were added
       - name: Propagate Live Container App Infrastructure Updates
         run: |
           az containerapp update \
