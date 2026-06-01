@@ -133,6 +133,10 @@ async def get_ai_response_stream(query: str):
         logger.error(f"Inference Error during asynchronous stream delivery: {str(error)}")
         yield "The service is currently unavailable. Please try again later."
 
+@app_instance.get("/")  # Default readiness check by Azure Container Apps (health probe). 
+def root():
+    return {"message": "CouncilConnect AI Backend - use /health for status"}
+
 @app_instance.get("/health") # Create a route (network address) named "/health" for communication with Azure Container App Ingress Gateway, for better request queue management and monitoring.
 def health_check():
     """Basic health probe for Azure Container Apps monitoring."""
