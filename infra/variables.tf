@@ -15,6 +15,20 @@ variable "location" {
   default     = "francecentral"
 }
 
+# The Object ID of the CI/CD Service Principal (GitHub actions)
+variable "pipeline_sp_object_id" {
+  type        = string
+  description = "The Object ID of the sp-councilconnect service principal"
+  default     = "df68d97e-bcff-4c54-9d79-f1e5cdd5c999"
+}
+
+# The Object ID of the developer who needs Key Vault Administrator access
+variable "developer_object_id" {
+  type        = string
+  description = "Object ID of the developer for manual Key Vault access"
+  default     = "15393d06-1154-4449-a619-14fb1a30c637"
+}
+
 # Output: The public URL for the resident interface
 output "frontend_url" {
   value = "https://${azurerm_container_app.frontend.ingress[0].fqdn}"
@@ -23,11 +37,4 @@ output "frontend_url" {
 # Output: The internal Vault URI for visibility
 output "vault_uri" {
   value = azurerm_key_vault.main.vault_uri
-}
-
-# The Object ID of the CI/CD Service Principal (GitHub actions)
-variable "pipeline_sp_object_id" {
-  type        = string
-  description = "The Object ID of the sp-councilconnect service principal"
-  default     = "df68d97e-bcff-4c54-9d79-f1e5cdd5c999"
 }

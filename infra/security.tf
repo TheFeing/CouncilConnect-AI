@@ -39,11 +39,11 @@ resource "azurerm_role_assignment" "acr_pull" {
   principal_id         = azurerm_user_assigned_identity.acr_puller.principal_id
 }
 
-# Admin Access Role: Grants the logged-in developer full access to manage data in Key Vault
+# Admin Access for Developer
 resource "azurerm_role_assignment" "admin_access" {
   scope                = azurerm_key_vault.main.id
   role_definition_name = "Key Vault Administrator"
-  principal_id         = data.azurerm_client_config.current.object_id
+  principal_id         = var.developer_object_id
 }
 
 # Vault Access Role: Grants the Backend App permission to read secrets from the Key Vault

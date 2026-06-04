@@ -12,6 +12,7 @@ import io                       # For managing in-memory byte streams during upl
 import scraper.crawler          # Custom module for executing domain crawling tasks
 import scraper.redactor         # Custom module for identifying and scrubbing PII datasets
 import os                       # For environment variable access to configuration parameters
+from app.telemetry import init_telemetry    # For setting up OpenTelemetry metrics with Azure Monitor
 
 # Configure application logging to print runtime operational signals to the console, which can be captured by Azure Monitor for observability.
 logging.basicConfig(level=logging.INFO)
@@ -57,6 +58,10 @@ async def lifespan(fastapi_app: fastapi.FastAPI):
         db_manager.ensure_collection_exists()
         logger.info("Database onboarding verification completed successfully.")
         
+        # Initialise telemetry infrastructure for custom metrics tracking
+        init_telemetry()
+        logger.info("Telemetry initialised.")
+
     except Exception as initialisation_error:
         logger.critical(f"Critical execution error triggered during initialisation phase: {initialisation_error}")
         raise SystemExit(initialisation_error)
@@ -127,6 +132,10 @@ async def get_ai_response_stream(query: str):
         # Log error for forwarding to log aggregator architectures
         logger.error(f"Inference Error during asynchronous stream delivery: {str(error)}")
         yield "The service is currently unavailable. Please try again later."
+
+@app_instance.get("/")  # Default readiness check by Azure Container Apps (health probe). 
+def root():
+    return {"message": "CouncilConnect AI Backend - use /health for status"}
 
 @app_instance.get("/health") # Create a route (network address) named "/health" for communication with Azure Container App Ingress Gateway, for better request queue management and monitoring.
 def health_check():
