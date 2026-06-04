@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 # 1. Configuration fetched from environment variables
 # These are injected via Terraform to allow the UI to find the API
 BACKEND_URL = os.getenv("BACKEND_URL", "http://api-gateway:8000")
-VERSION = os.getenv("APP_VERSION", "v1.0-stable")
+VERSION = os.getenv("APP_VERSION", "v1.0-stable")   # Fall back to "v1.0-stable" if not set.
 IS_BETA = "beta" in VERSION.lower()
 
 # Defining an experimental feature flag based on the version string to conditionally enable beta features in the UI.

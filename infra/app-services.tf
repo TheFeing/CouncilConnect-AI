@@ -160,7 +160,7 @@ resource "azurerm_container_app" "frontend" {
         value = "https://${azurerm_container_app.app.ingress[0].fqdn}"
       }
 
-      # Deployment metadata for Sprint 9 Blue/Green logic
+      # Deployment metadata for feature toggle logic
       env {
         name  = "APP_VERSION"
         value = "v1.0-stable"
