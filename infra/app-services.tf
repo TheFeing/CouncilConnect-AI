@@ -36,20 +36,28 @@ resource "azurerm_container_app" "app" {
     identity = azurerm_user_assigned_identity.acr_puller.id
   }
 
-  # Retaining existing secrets declarations to satisfy the Azure API constraint
+  # SECURITY: Secrets are referenced directly from Key Vault.
+  # The actual secret values never appear in Terraform state, only the Key Vault secret ID is stored.
+  # The container app's system‑assigned managed identity (granted Key Vault Secrets User role) is used to fetch them at runtime.
   secret {
-    name  = "gemma-api-key"
-    value = data.azurerm_key_vault_secret.gemma_key.value
+    name                = "gemma-api-key"
+    key_vault_secret_id = data.azurerm_key_vault_secret.gemma_key.id
+    identity            = "System"   # Use system-assigned identity (has Key Vault Secrets User role)
+    value               = ""         # Required by provider but ignored when key_vault_secret_id is set
   }
 
   secret {
-    name  = "qdrant-url"
-    value = data.azurerm_key_vault_secret.qdrant_url.value
+    name                = "qdrant-url"
+    key_vault_secret_id = data.azurerm_key_vault_secret.qdrant_url.id
+    identity            = "System"
+    value               = ""
   }
 
   secret {
-    name  = "qdrant-api-key"
-    value = data.azurerm_key_vault_secret.qdrant_key.value
+    name                = "qdrant-api-key"
+    key_vault_secret_id = data.azurerm_key_vault_secret.qdrant_key.id
+    identity            = "System"
+    value               = ""
   }
 
   # Desired state: Container blueprint
@@ -65,23 +73,23 @@ resource "azurerm_container_app" "app" {
         value = azurerm_key_vault.main.vault_uri
       }
 
-      # Inject values directly as explicit deployment string inputs to avoid look-up delays
+      # Inject the secret values using the secret_name reference
       env {
-        name  = "GEMMA_API_KEY"
-        value = data.azurerm_key_vault_secret.gemma_key.value
+        name        = "GEMMA_API_KEY"
+        secret_name = "gemma-api-key"
       }
 
       env {
-        name  = "QDRANT_URL"
-        value = data.azurerm_key_vault_secret.qdrant_url.value
+        name        = "QDRANT_URL"
+        secret_name = "qdrant-url"
       }
 
       env {
-        name  = "QDRANT_API_KEY"
-        value = data.azurerm_key_vault_secret.qdrant_key.value
+        name        = "QDRANT_API_KEY"
+        secret_name = "qdrant-api-key"
       }
 
-      # Dynamic Model Ingestion Configuration Mapping
+      # Dynamic Model Ingestion Configuration Mapping (non‑secret)
       env {
         name  = "GEMINI_SAFETY_MODEL"
         value = "gemini-3.1-flash-lite"
