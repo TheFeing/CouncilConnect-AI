@@ -1,4 +1,3 @@
-markdown
 # CouncilConnect AI
 
 [![Python Version](https://img.shields.io/badge/python-3.11%20%7C%203.14-blue)](https://www.python.org/)
@@ -30,10 +29,10 @@ The system architecture is documented in [`ARCHITECTURE.md`](./ARCHITECTURE.md) 
 |-------------------------|----------------------------------------------------------------------------|
 | Backend API             | Python 3.11+ / FastAPI                                                     |
 | Frontend UI             | Streamlit                                                                  |
-| Vector Database         | Qdrant (cloud / self‑hosted)                                              |
+| Vector Database         | Qdrant (cloud / self‑hosted)                                               |
 | LLM                     | Google Gemma 4 (via `google-genai` SDK)                                    |
-| Embedding Model         | `gemini-embedding-001` (3072 dimensions)                                  |
-| Security                | Azure Key Vault, RBAC, Managed Identity, PII redactor                      |
+| Embedding Model         | `gemini-embedding-001` (3072 dimensions)                                   |
+| Security                | Azure Key Vault, RBAC, Managed Identity, PII redactor, **no secrets in Terraform state** |
 | Infrastructure as Code  | Terraform (HCL)                                                            |
 | Containerisation        | Docker, Azure Container Registry (ACR)                                     |
 | Orchestration           | Azure Container Apps (KEDA scaling to zero)                                |
@@ -43,6 +42,7 @@ The system architecture is documented in [`ARCHITECTURE.md`](./ARCHITECTURE.md) 
 | Testing                 | Pytest (52 tests, coverage >80%), Locust (load testing)                    |
 
 ## Repository Structure
+
 .
 ├── .github/workflows/ # CI/CD pipeline
 ├── app/ # Backend FastAPI application
@@ -70,8 +70,6 @@ The system architecture is documented in [`ARCHITECTURE.md`](./ARCHITECTURE.md) 
 ├── ARCHITECTURE.md # System architecture (Mermaid diagram)
 └── requirements.txt # Python dependencies
 
-text
-
 ## Getting Started
 
 ### Prerequisites
@@ -86,46 +84,49 @@ text
 ```bash
 git clone https://github.com/TheFeing/CouncilConnect-AI.git
 cd CouncilConnect-AI
-2. Set up environment variables (local development)
+```
+
+### 2. Set up environment variables (local development)
 Create a .env file with:
 
-text
+```
 GEMMA_API_KEY=your_google_gemma_api_key
 QDRANT_URL=https://your-qdrant-cluster-url
 QDRANT_API_KEY=your_qdrant_api_key
 APPLICATIONINSIGHTS_CONNECTION_STRING=your_app_insights_conn_string   # optional for local
-Note: In production, all secrets are injected via Azure Key Vault; these variables are only for local testing.
+```
+> Note: In production, all secrets are injected directly from Azure Key Vault using a system‑assigned managed identity. No secret values are stored in Terraform state or plaintext configuration files.
 
-3. Install Python dependencies
-bash
+### 3. Install Python dependencies
+```bash
 python -m venv venv
 source venv/bin/activate      # or `venv\Scripts\activate` on Windows
 pip install -r requirements.txt
-4. Run tests
-bash
+```
+
+### 4. Run tests
+```bash
 make test
+```
 All 52 tests should pass with coverage >80%.
 
-5. Run locally (optional)
-bash
+### 5. Run locally (optional)
+```bash
 uvicorn app.main:app_instance --reload --port 8000   # backend
 streamlit run frontend/app.py                        # frontend (in another terminal)
-Deployment (Azure)
+```
+
+## Deployment (Azure)
 All infrastructure and application code are deployed via GitHub Actions on every push to main. The pipeline:
-
-Runs make lint and make test.
-
-Scans dependencies with pip-audit and code with bandit.
-
-Builds Docker images (backend & frontend) and pushes to ACR.
-
-Runs terraform plan and, on main, terraform apply.
-
-Updates the live Container Apps with the new images.
+1. Runs make lint and make test.
+2. Scans dependencies with pip-audit and code with bandit.
+3. Builds Docker images (backend & frontend) and pushes to ACR.
+4. Runs terraform plan and, on main, terraform apply.
+5. Updates the live Container Apps with the new images.
 
 To deploy manually (for testing):
 
-bash
+```bash
 # Authenticate to Azure
 az login
 az account set --subscription <your-subscription-id>
@@ -138,7 +139,9 @@ terraform apply -auto-approve
 # Build and push images
 make deploy-docker-backend
 make deploy-docker-frontend
-Key Features (Distinction Evidence)
+```
+
+## Key Features (Distinction Evidence)
 Feature	Implementation
 Custom metric	pii.redactions.total exported via OpenTelemetry to Application Insights
 Feature toggle	APP_VERSION environment variable controls experimental UI (branching by abstraction)
@@ -147,41 +150,33 @@ Scheduled patching	Weekly cron trigger rebuilds images (immutable infrastructure
 Dependency & SAST scanning	pip-audit + bandit in CI pipeline
 PII redaction	Email, phone, health ID, NI‑style refs, dynamic name sweeping
 Infrastructure as Code	Terraform (resource group, Key Vault, ACR, Container Apps, budget, monitoring)
-Rollback (MTTR)	Container Apps revision mode Multiple – rollback in <2 minutes
+Secure secret handling	Secrets referenced directly from Key Vault using system‑assigned managed identity; no secrets stored in Terraform state
+Rollback (MTTR)	Container Apps revision mode Multiple - rollback in <2 minutes
 User stories & acceptance	Three personas: director (cost + rollback), admin (ingestion), resident (speed + accuracy)
-Monitoring
-Application Insights receives:
 
-Standard metrics (CPU, memory, request rate)
+## Monitoring
+- Application Insights receives:
+    - Standard metrics (CPU, memory, request rate)
+    - Custom metric pii.redactions.total
+    - Traces from the FastAPI app
+- Log Analytics stores all logs and metrics (30‑day retention)
+- Grafana visualises data from Log Analytics (custom dashboards)
+- Budget alert (£10/month) prevents cost overruns
 
-Custom metric pii.redactions.total
-
-Traces from the FastAPI app
-
-Log Analytics stores all logs and metrics (30‑day retention)
-
-Grafana visualises data from Log Analytics (custom dashboards)
-
-Budget alert (£10/month) prevents cost overruns
-
-Troubleshooting (Example)
+## Troubleshooting (Example)
 Issue: terraform plan fails with 403 Forbidden when reading Key Vault secrets.
 Cause: The dynamic role assignment admin_access used data.azurerm_client_config.current.object_id, which changed between local (developer) and pipeline (service principal) runs.
 Fix: Replaced dynamic principal with a fixed var.developer_object_id variable and granted the pipeline separate Key Vault Secrets User role. See security.tf and variables.tf.
 
-Contributing
+## Contributing
 This is a personal project for an apprenticeship assessment. Issues and suggestions are welcome via GitHub Issues.
 
-License
-MIT – feel free to use and adapt for educational purposes.
+## License
+MIT - feel free to use and adapt for educational purposes.
 
-Acknowledgements
-Salford City Council – for the use case inspiration
-
-Google – Gemma 4 & Gemini embedding models
-
-Qdrant – vector database
-
-Azure Container Apps – serverless hosting
-
-Streamlit – rapid UI prototyping
+## Acknowledgements
+- Salford City Council - for the use case inspiration
+- Google - Gemma 4 & Gemini embedding models
+- Qdrant - vector database
+- Azure Container Apps - serverless hosting
+- Streamlit - rapid UI prototyping
