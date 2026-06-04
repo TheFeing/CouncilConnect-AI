@@ -143,7 +143,7 @@ jobs:
           echo "Inspecting state tracking tables for existing roles..."
           if ! terraform state show azurerm_role_assignment.admin_access > /dev/null 2>&1; then
             echo "Admin role assignment missing from state. Attempting automated import..."
-            terraform import azurerm_role_assignment.admin_access /subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/rg-councilconnect-ai/providers/Microsoft.KeyVault/vaults/kv-councilconnect-ai/providers/Microsoft.Authorization/roleAssignments/61905fb69d614434bbafd71348102b81 || true
+            terraform import azurerm_role_assignment.admin_access /subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/rg-councilconnect-ai/providers/Microsoft.KeyVault/vaults/kv-councilconnect-ai/providers/Microsoft.Authorization/roleAssignments/b1276413c2634ad4b1e82b67b514b721 || true
           fi
           if ! terraform state show azurerm_role_assignment.sp_vault_access > /dev/null 2>&1; then
             echo "Pipeline role assignment missing from state. Attempting automated import..."
