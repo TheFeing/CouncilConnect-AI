@@ -29,12 +29,19 @@ variable "developer_object_id" {
   default     = "15393d06-1154-4449-a619-14fb1a30c637"
 }
 
+# Email address for monitoring alerts
+variable "alert_email" {
+  type        = string
+  description = "Email address for monitoring alerts"
+  default     = "ngfeilik@gmail.com"
+}
+
 # Output: The public URL for the resident interface
 output "frontend_url" {
   value = "https://${azurerm_container_app.frontend.ingress[0].fqdn}"
 }
 
-# Output: The internal Vault URI for visibility
-output "vault_uri" {
-  value = azurerm_key_vault.main.vault_uri
+# Output: The public URL for load test
+output "backend_url" {
+  value = "https://${azurerm_container_app.app.ingress[0].fqdn}"
 }
