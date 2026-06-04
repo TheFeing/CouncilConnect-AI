@@ -83,14 +83,14 @@ resource "azurerm_monitor_metric_alert" "high_replica_count" {
   resource_group_name = azurerm_resource_group.rg.name
   scopes              = [azurerm_container_app.app.id]
   description         = "Alert when average replica count hits 5 over 5 minutes"
-  severity            = 2 # 0-Critical, 1-Error, 2-Warning, 3-Informational, 4-Verbose
-  frequency           = "PT1M"  # Period of time = 1 minute, evaluation frequency
-  window_size         = "PT5M"  # Period of time = 5 minute, lookback window
+  severity            = 2      # 0-Critical, 1-Error, 2-Warning, 3-Informational, 4-Verbose
+  frequency           = "PT1M" # Period of time = 1 minute, evaluation frequency
+  window_size         = "PT5M" # Period of time = 5 minute, lookback window
 
   criteria {
     metric_namespace = "Microsoft.App/containerapps"
     metric_name      = "Requests"
-    aggregation      = "Total"  # Or "Average" for the past period of time window
+    aggregation      = "Total" # Or "Average" for the past period of time window
     operator         = "GreaterThanOrEqual"
     threshold        = 500
   }

@@ -42,8 +42,8 @@ resource "azurerm_container_app" "app" {
   secret {
     name                = "gemma-api-key"
     key_vault_secret_id = data.azurerm_key_vault_secret.gemma_key.id
-    identity            = "System"   # Use system-assigned identity (has Key Vault Secrets User role)
-    value               = ""         # Required by provider but ignored when key_vault_secret_id is set
+    identity            = "System" # Use system-assigned identity (has Key Vault Secrets User role)
+    value               = ""       # Required by provider but ignored when key_vault_secret_id is set
   }
 
   secret {
