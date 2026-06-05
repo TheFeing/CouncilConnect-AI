@@ -8,7 +8,7 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 3.100.0"
     }
-    random = {  # Provides unique random values for backup storage
+    random = { # Provides unique random values for backup storage
       source  = "hashicorp/random"
       version = "~> 3.0"
     }
