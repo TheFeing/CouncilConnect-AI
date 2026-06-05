@@ -77,12 +77,12 @@ resource "azurerm_container_app_environment" "env" {
   dapr_application_insights_connection_string = azurerm_application_insights.app_insights.connection_string
 }
 
-# Alert when backend container app replica count hits 5
-resource "azurerm_monitor_metric_alert" "high_replica_count" {
-  name                = "alert-high-replica-count"
+# Alert when backend container app hits threshold
+resource "azurerm_monitor_metric_alert" "high_request_count" {
+  name                = "alert-high-request-count"
   resource_group_name = azurerm_resource_group.rg.name
   scopes              = [azurerm_container_app.app.id]
-  description         = "Alert when average replica count hits 5 over 5 minutes"
+  description         = "Alert when total requests exceed 500 over 5 minutes"
   severity            = 2      # 0-Critical, 1-Error, 2-Warning, 3-Informational, 4-Verbose
   frequency           = "PT1M" # Period of time = 1 minute, evaluation frequency
   window_size         = "PT5M" # Period of time = 5 minute, lookback window
@@ -90,7 +90,7 @@ resource "azurerm_monitor_metric_alert" "high_replica_count" {
   criteria {
     metric_namespace = "Microsoft.App/containerapps"
     metric_name      = "Requests"
-    aggregation      = "Total" # Or "Average" for the past period of time window
+    aggregation      = "Total" # Or "Average"
     operator         = "GreaterThanOrEqual"
     threshold        = 500
   }
