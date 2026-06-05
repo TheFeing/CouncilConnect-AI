@@ -6,7 +6,11 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 3.100.0" # Updated to support key_vault_secret_id in container app secrets
+      version = "~> 3.100.0"
+    }
+    random = {  # Provides unique random values for backup storage
+      source  = "hashicorp/random"
+      version = "~> 3.0"
     }
   }
   # Remote Backend: State file is stored in Azure Blob Storage rather than locally
