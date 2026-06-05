@@ -2,6 +2,14 @@ import os           # Accessing system environment parameters natively
 import re           # String cleaning via regex matching patterns
 import logging      # Logging activity and errors
 
+# After other imports
+try:
+    from app.telemetry import get_pii_redaction_counter
+except ImportError:
+    # Keyword lambda is used to create an anonymous function that takes no arguments and returns None when called.
+    # lambda is a placeholder that returns None if telemetry is not available to avoid breaking the redaction logic when telemetry is not set up.
+    get_pii_redaction_counter = lambda: None
+
 # Configure operational logging infrastructure for the redaction subsystem.
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -91,6 +99,11 @@ class PIIRedactor:
                 escaped_name = re.escape(name)
                 global_name_regex = re.compile(rf'\b{escaped_name}\b')
                 cleaned_text = global_name_regex.sub('[NAME_REDACTED]', cleaned_text)
+
+        # Step 5: Increment telemetry counter for redactions performed (if telemetry is available)
+        pii_redaction_counter = get_pii_redaction_counter()
+        if pii_redaction_counter is not None:
+            pii_redaction_counter.add(1)
 
         return cleaned_text
 

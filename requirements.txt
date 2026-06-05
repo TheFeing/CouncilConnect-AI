@@ -16,3 +16,5 @@ qdrant-client           # Vector database connection
 requests                # HTTP requests for scraping
 streamlit               # Frontend UI framework
 uvicorn                 # Runs the web server
+azure-monitor-opentelemetry>=1.8.0      # For creating custom metrics
+azure-storage-blob      # For secondary backup storage

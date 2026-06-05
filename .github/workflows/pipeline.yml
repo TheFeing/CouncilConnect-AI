@@ -2,10 +2,10 @@
 name: Core CI-CD Automation Pipeline
 
 on:
-  # Triggered only in these scenarios and changes to these paths.
+  # Triggered only in these scenarios.
   push:
     branches: [ main ]
-    paths: 
+    paths:  # Changes to these files/directories trigger the pipeline.
       - 'infra/**'
       - 'app/**'
       - 'frontend/**'
@@ -17,7 +17,7 @@ on:
       - '.github/workflows/**'
   pull_request:
     branches: [ main ]
-    paths: 
+    paths:  # Changes to these files/directories trigger the pipeline.
       - 'infra/**'
       - 'app/**'
       - 'frontend/**'
@@ -27,6 +27,8 @@ on:
       - 'requirements.txt'
       - 'Makefile'
       - '.github/workflows/**'
+  schedule: # Scheduled runs for routine maintenance and non-event-driven tasks (e.g., rebuild and redeploy containers).
+    - cron: '0 1 * * 0' # Run every Sunday at 1:00 AM UTC.
 
 concurrency:
   group: deployment-${{ github.ref }} # Group concurrent runs (github.ref is branch or PR identifier) to prevent multiple Terraform runs on same branch/PR.
@@ -83,10 +85,20 @@ jobs:
           # Use the python module runner to ensure paths are respected
           python -m pytest tests/ --cov=app --cov=scraper --cov-report=term-missing --cov-fail-under=80
 
+      - name: Scan dependencies for vulnerabilities
+        run: |
+          pip install pip-audit
+          pip-audit --requirement requirements.txt
+
+      - name: Run bandit security linter
+        run: |
+          pip install bandit
+          bandit -r app/ scraper/ -ll -ii   # -ll only shows high severity issues, -ii only shows high confidence issues.
+
       - name: Upload Coverage Report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4  # Uploads the HTML coverage report as an artifact to GitHub for later retrieval and analysis.
         with:
-          name: html-coverage-report-py${{ matrix.python-version }}
+          name: html-coverage-report-py${{ matrix.python-version }}   # Unique name for each Python version's report to prevent overwriting.
           path: htmlcov/
         if: always() # Ensures test results are recorded even if previous testing checks failed.
 
@@ -131,7 +143,7 @@ jobs:
           echo "Inspecting state tracking tables for existing roles..."
           if ! terraform state show azurerm_role_assignment.admin_access > /dev/null 2>&1; then
             echo "Admin role assignment missing from state. Attempting automated import..."
-            terraform import azurerm_role_assignment.admin_access /subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/rg-councilconnect-ai/providers/Microsoft.KeyVault/vaults/kv-councilconnect-ai/providers/Microsoft.Authorization/roleAssignments/61905fb69d614434bbafd71348102b81 || true
+            terraform import azurerm_role_assignment.admin_access /subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/rg-councilconnect-ai/providers/Microsoft.KeyVault/vaults/kv-councilconnect-ai/providers/Microsoft.Authorization/roleAssignments/b1276413c2634ad4b1e82b67b514b721 || true
           fi
           if ! terraform state show azurerm_role_assignment.sp_vault_access > /dev/null 2>&1; then
             echo "Pipeline role assignment missing from state. Attempting automated import..."
@@ -155,7 +167,7 @@ jobs:
     name: Build, Push & Rollout Application Images
     runs-on: ubuntu-latest
     needs: terraform # Infrastructure changes must be completed before new app builds run.
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' # Runs exclusively on pushes to main branch.
+    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'schedule' # Runs on pushes to main branch or scheduled runs.
 
     steps:
       - name: Checkout Source Code
