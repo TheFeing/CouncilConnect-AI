@@ -13,6 +13,11 @@ import scraper.crawler          # Custom module for executing domain crawling ta
 import scraper.redactor         # Custom module for identifying and scrubbing PII datasets
 import os                       # For environment variable access to configuration parameters
 from app.telemetry import init_telemetry    # For setting up OpenTelemetry metrics with Azure Monitor
+from azure.identity import DefaultAzureCredential  # For authenticating with Azure services using managed identities
+from azure.storage.blob import BlobServiceClient     # For blob storage interactions
+import json                     # For handling JSON data structures during blob backup operations
+import uuid                     # For generating unique identifiers for blob storage naming
+
 
 # Configure application logging to print runtime operational signals to the console, which can be captured by Azure Monitor for observability.
 logging.basicConfig(level=logging.INFO)
@@ -207,12 +212,46 @@ async def execute_crawl(request: CrawlRequest):
         
         vector_manager = app.database.VectorStoreManager(collection_name="council_knowledge")
         
+        # Prepare Azure Blob backup
+        blob_container_name = "knowledge-base-backups"
+        blob_service_client = None
+        container_client = None
+        try:
+            account_name = os.getenv("STORAGE_ACCOUNT_NAME")
+            if account_name:
+                credential = DefaultAzureCredential()
+                blob_service_client = BlobServiceClient(
+                    account_url=f"https://{account_name}.blob.core.windows.net",
+                    credential=credential
+                )
+                container_client = blob_service_client.get_container_client(blob_container_name)
+                logger.info("Azure Blob client initialised for crawl backup")
+            else:
+                logger.warning("STORAGE_ACCOUNT_NAME not set; skipping blob backup for crawled content")
+        except Exception as blob_init_error:
+            logger.error(f"Failed to initialise blob client for crawl backup: {blob_init_error}")
+        
         processed_count = 0
         for page_url, raw_html_content in raw_scraped_pages.items():
             # Apply corporate redactor scrub rules to eliminate potential structural PII exposure profiles prior to storage
             sanitised_content = scraper.redactor.redact_pii(raw_html_content)
             
-            # Commit down into the cluster index layout boundaries
+            # Backup this crawled page to Azure Blob Storage (Disaster Recovery)
+            if container_client:
+                try:
+                    blob_name = f"crawl_{uuid.uuid4().hex[:8]}.json"
+                    backup_data = {
+                        "url": page_url,
+                        "text": sanitised_content,
+                        "type": "web_scraped"
+                    }
+                    blob_client = container_client.get_blob_client(blob_name)
+                    blob_client.upload_blob(json.dumps(backup_data), overwrite=True)
+                    logger.info(f"Crawl backup uploaded to blob storage: {blob_name}")
+                except Exception as blob_upload_error:
+                    logger.error(f"Failed to upload crawled page to blob: {blob_upload_error}")
+            
+            # Commit down into the cluster index layout boundaries (primary storage)
             vector_manager.upsert_document(
                 text=sanitised_content,
                 metadata={"source": page_url, "type": "web_scraped"}
@@ -252,6 +291,29 @@ async def ingest_pdf_document(file: fastapi.UploadFile = fastapi.File(...)):
         # Run compliance verification scrubbing sequences
         sanitised_document_string = scraper.redactor.redact_pii(raw_document_string)
         
+        # Upload backup to blob storage (Disaster Recovery)
+        try:
+            credential = DefaultAzureCredential()
+            account_name = os.getenv("STORAGE_ACCOUNT_NAME")
+            if not account_name:
+                logger.warning("STORAGE_ACCOUNT_NAME not set; skipping blob backup")
+            else:
+                blob_service_client = BlobServiceClient(
+                    account_url=f"https://{account_name}.blob.core.windows.net",
+                    credential=credential
+                )
+                container_client = blob_service_client.get_container_client("knowledge-base-backups")
+                blob_name = f"{uuid.uuid4().hex[:8]}.json"
+                backup_data = {
+                    "url": file.filename,
+                    "text": sanitised_document_string
+                }
+                blob_client = container_client.get_blob_client(blob_name)
+                blob_client.upload_blob(json.dumps(backup_data), overwrite=True)
+                logger.info(f"Backup uploaded to blob storage: {blob_name}")
+        except Exception as blob_error:
+            logger.error(f"Failed to upload backup to blob storage: {blob_error}")
+
         # Split comprehensive document files using structural paragraph delimiters to respect embedding context token limitations
         document_paragraphs = [paragraph.strip() for paragraph in sanitised_document_string.split("\n\n") if paragraph.strip()]
         

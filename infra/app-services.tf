@@ -109,6 +109,11 @@ resource "azurerm_container_app" "app" {
         name  = "APPLICATIONINSIGHTS_CONNECTION_STRING"
         value = azurerm_application_insights.app_insights.connection_string
       }
+
+      env {
+        name  = "STORAGE_ACCOUNT_NAME"
+        value = azurerm_storage_account.backup.name
+      }
     }
 
     # KEDA Scaling: Logic to manage replicas based on traffic
