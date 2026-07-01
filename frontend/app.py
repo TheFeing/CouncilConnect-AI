@@ -61,7 +61,7 @@ streamlit.markdown(f"""
 """, unsafe_allow_html=True)
 
 # 3. Structural Header Construction across every interface option
-streamlit.markdown('<div class="disclaimer-banner">⚠️ ACADEMIC DEVELOPMENT PROTOTYPE — NOT FOR PRODUCTION PUBLIC DEPLOYMENT</div>', unsafe_allow_html=True)
+streamlit.markdown('<div class="disclaimer-banner">⚠️ DevOps Demonstration 2026-07-01 — NOT FOR PRODUCTION PUBLIC DEPLOYMENT</div>', unsafe_allow_html=True)
 
 streamlit.markdown("""
     <div style="background-color: #98002E; padding: 20px; border-radius: 5px; margin-bottom: 25px;">
